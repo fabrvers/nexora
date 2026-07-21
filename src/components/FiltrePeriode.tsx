@@ -1,49 +1,94 @@
-import { useState } from "react";
 import { LIBELLES_PERIODE, type ClePeriode } from "../lib/periods";
 
-const CHOIX: ClePeriode[] = [
-  "tout", "mois_courant", "mois_precedent", "annee_courante", "annee_precedente",
-  "semestre_1", "semestre_2", "exercice_courant", "personnalisee",
+/**
+ * Filtre de période.
+ *
+ * Les entrées suivies de points de suspension ouvrent un second champ :
+ * un mois précis, une année précise, ou deux dates. Les autres s'appliquent
+ * immédiatement.
+ */
+const GROUPES: { titre: string; choix: ClePeriode[] }[] = [
+  { titre: "Mois", choix: ["mois_courant", "mois_precedent", "mois_choisi"] },
+  { titre: "Année", choix: ["annee_courante", "annee_precedente", "annee_choisie"] },
+  { titre: "Semestre", choix: ["semestre_1", "semestre_2"] },
+  { titre: "Comptabilité", choix: ["exercice_courant", "personnalisee"] },
 ];
 
-export function FiltrePeriode({
-  valeur, debut, fin, onChange,
-}: {
-  valeur: ClePeriode;
+export interface EtatPeriode {
+  cle: ClePeriode;
   debut?: string;
   fin?: string;
-  onChange: (v: ClePeriode, debut?: string, fin?: string) => void;
+  mois?: string;
+  annee?: number;
+}
+
+export function FiltrePeriode({
+  valeur, onChange,
+}: {
+  valeur: EtatPeriode;
+  onChange: (v: EtatPeriode) => void;
 }) {
-  const [ouvert, setOuvert] = useState(valeur === "personnalisee");
+  const anneeCourante = new Date().getFullYear();
+  const annees = Array.from({ length: 8 }, (_, i) => anneeCourante - i);
 
   return (
     <div className="flex flex-wrap items-center gap-2">
       <select
-        value={valeur}
+        value={valeur.cle}
         onChange={(e) => {
-          const v = e.target.value as ClePeriode;
-          setOuvert(v === "personnalisee");
-          onChange(v, debut, fin);
+          const cle = e.target.value as ClePeriode;
+          onChange({
+            ...valeur,
+            cle,
+            // Valeurs par defaut raisonnables pour eviter un filtre vide.
+            mois: cle === "mois_choisi" && !valeur.mois
+              ? new Date().toISOString().slice(0, 7) : valeur.mois,
+            annee: cle === "annee_choisie" && !valeur.annee ? anneeCourante : valeur.annee,
+          });
         }}
-        className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm dark:border-zinc-800 dark:bg-zinc-900"
+        className="champ w-auto py-1.5 text-petit"
+        aria-label="Période"
       >
-        {CHOIX.map((c) => (
-          <option key={c} value={c}>{LIBELLES_PERIODE[c]}</option>
+        <option value="tout">{LIBELLES_PERIODE.tout}</option>
+        {GROUPES.map(({ titre, choix }) => (
+          <optgroup key={titre} label={titre}>
+            {choix.map((c) => (
+              <option key={c} value={c}>{LIBELLES_PERIODE[c]}</option>
+            ))}
+          </optgroup>
         ))}
       </select>
 
-      {ouvert && (
-        <div className="flex items-center gap-2 text-sm">
+      {valeur.cle === "mois_choisi" && (
+        <input
+          type="month" value={valeur.mois ?? ""} aria-label="Mois"
+          onChange={(e) => onChange({ ...valeur, mois: e.target.value })}
+          className="champ tabulaire w-auto py-1.5 text-petit"
+        />
+      )}
+
+      {valeur.cle === "annee_choisie" && (
+        <select
+          value={valeur.annee ?? anneeCourante} aria-label="Année"
+          onChange={(e) => onChange({ ...valeur, annee: Number(e.target.value) })}
+          className="champ tabulaire w-auto py-1.5 text-petit"
+        >
+          {annees.map((a) => <option key={a} value={a}>{a}</option>)}
+        </select>
+      )}
+
+      {valeur.cle === "personnalisee" && (
+        <div className="flex items-center gap-1.5">
           <input
-            type="date" value={debut ?? ""}
-            onChange={(e) => onChange("personnalisee", e.target.value, fin)}
-            className="rounded-lg border border-zinc-200 bg-white px-2 py-1.5 dark:border-zinc-800 dark:bg-zinc-900"
+            type="date" value={valeur.debut ?? ""} aria-label="Début de période"
+            onChange={(e) => onChange({ ...valeur, debut: e.target.value })}
+            className="champ tabulaire w-auto py-1.5 text-petit"
           />
-          <span className="text-zinc-400">au</span>
+          <span className="text-petit text-doux">au</span>
           <input
-            type="date" value={fin ?? ""}
-            onChange={(e) => onChange("personnalisee", debut, e.target.value)}
-            className="rounded-lg border border-zinc-200 bg-white px-2 py-1.5 dark:border-zinc-800 dark:bg-zinc-900"
+            type="date" value={valeur.fin ?? ""} aria-label="Fin de période"
+            onChange={(e) => onChange({ ...valeur, fin: e.target.value })}
+            className="champ tabulaire w-auto py-1.5 text-petit"
           />
         </div>
       )}

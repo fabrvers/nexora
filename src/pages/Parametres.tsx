@@ -1,38 +1,79 @@
 import { useEffect, useState } from "react";
-import type { ParametresUI } from "../lib/api";
+import type { EtatMaj, ParametresUI } from "../lib/api";
+import { LIBELLES_THEME, type Theme } from "../lib/theme";
 
 const MOIS = ["Janvier","Février","Mars","Avril","Mai","Juin",
               "Juillet","Août","Septembre","Octobre","Novembre","Décembre"];
 
-function Champ({ label, aide, children }: {
-  label: string; aide?: string; children: React.ReactNode;
+type Rubrique = "dossiers" | "pennylane" | "envoi" | "apparence" | "fonctionnement" | "apropos";
+
+const RUBRIQUES: { cle: Rubrique; libelle: string; aide: string }[] = [
+  { cle: "dossiers", libelle: "Dossiers", aide: "Où Nexora surveille les dépôts" },
+  { cle: "pennylane", libelle: "Pennylane", aide: "Adresses de transmission" },
+  { cle: "envoi", libelle: "Serveur d'envoi", aide: "Compte SMTP utilisé" },
+  { cle: "apparence", libelle: "Apparence", aide: "Thème de l'application" },
+  { cle: "fonctionnement", libelle: "Fonctionnement", aide: "Exercice, délais, démarrage" },
+  { cle: "apropos", libelle: "À propos", aide: "Version et mises à jour" },
+];
+
+const MESSAGE_MAJ: Record<EtatMaj["phase"], (e: EtatMaj) => string> = {
+  inactif: () => "",
+  verification: () => "Vérification en cours…",
+  "a-jour": (e) => `Vous êtes à jour (version ${"version" in e ? e.version : ""}).`,
+  disponible: (e) => `Version ${"version" in e ? e.version : ""} disponible, téléchargement en cours…`,
+  telechargement: (e) => `Téléchargement : ${"pourcentage" in e ? e.pourcentage : 0} %`,
+  prete: (e) => `La version ${"version" in e ? e.version : ""} est prête à être installée.`,
+  erreur: (e) => ("message" in e ? e.message : "Erreur inconnue"),
+};
+
+/** Rubriques concernées par chaque réglage manquant, pour la pastille d'alerte. */
+const RUBRIQUE_DU_MANQUANT: Record<string, Rubrique> = {
+  "Dossier des factures d'achat": "dossiers",
+  "Dossier des factures de vente": "dossiers",
+  "Adresse Pennylane des achats": "pennylane",
+  "Adresse Pennylane des ventes": "pennylane",
+  "Serveur d'envoi": "envoi",
+  "Adresse d'expédition": "envoi",
+};
+
+function Champ({ label, aide, alerte, children }: {
+  label: string; aide?: string; alerte?: string; children: React.ReactNode;
 }) {
   return (
     <label className="block">
-      <span className="text-sm font-medium">{label}</span>
-      {children}
-      {aide && <span className="mt-1 block text-xs text-zinc-500">{aide}</span>}
+      <span className="text-petit font-medium">{label}</span>
+      <div className="mt-1.5">{children}</div>
+      {alerte && <span className="mt-1 block text-petit text-attente">{alerte}</span>}
+      {!alerte && aide && <span className="mt-1 block text-petit text-doux">{aide}</span>}
     </label>
   );
 }
 
-const champClasses =
-  "mt-1.5 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm dark:border-zinc-800 dark:bg-zinc-900";
-
 export function Parametres({ onEnregistre }: { onEnregistre: (p: ParametresUI) => void }) {
   const [p, setP] = useState<ParametresUI | null>(null);
+  const [rubrique, setRubrique] = useState<Rubrique>("dossiers");
   const [motDePasse, setMotDePasse] = useState("");
   const [test, setTest] = useState<{ ok: boolean; message: string } | null>(null);
   const [enregistre, setEnregistre] = useState(false);
+  const [apropos, setApropos] = useState<{ version: string; auteur: string; electron: string } | null>(null);
+  const [maj, setMaj] = useState<EtatMaj>({ phase: "inactif" });
 
   useEffect(() => { void window.api.parametres().then(setP); }, []);
+  useEffect(() => { void window.api.version().then(setApropos); }, []);
+  useEffect(() => {
+    void window.api.majEtat().then(setMaj);
+    return window.api.surMaj(setMaj);
+  }, []);
   if (!p) return null;
 
   const set = (champs: Partial<ParametresUI>) => setP({ ...p, ...champs });
 
+  const manquantsDe = (cle: Rubrique) =>
+    p.manquants.filter((m) => RUBRIQUE_DU_MANQUANT[m] === cle).length;
+
   const choisir = async (cle: "dossierAchats" | "dossierVentes") => {
     const dossier = await window.api.choisirDossier();
-    if (dossier) set({ [cle]: dossier } as any);
+    if (dossier) set({ [cle]: dossier } as Partial<ParametresUI>);
   };
 
   const enregistrer = async () => {
@@ -44,183 +85,304 @@ export function Parametres({ onEnregistre }: { onEnregistre: (p: ParametresUI) =
     setTimeout(() => setEnregistre(false), 3000);
   };
 
-  /** Avertit si l'adresse ne correspond pas au domaine attendu du flux. */
   const alerteDomaine = (adresse: string, attendu: string, flux: string) =>
     adresse && !adresse.endsWith(attendu)
-      ? `Cette adresse ne se termine pas par ${attendu} : les factures ${flux} risquent d'arriver dans le mauvais onglet.`
+      ? `Cette adresse ne finit pas par ${attendu}. Les factures ${flux} arriveraient dans le mauvais onglet Pennylane.`
       : undefined;
 
+  const DossierChamp = ({ cle, label }: {
+    cle: "dossierAchats" | "dossierVentes"; label: string;
+  }) => (
+    <Champ label={label}>
+      <div className="flex gap-2">
+        <input
+          readOnly value={p[cle]} placeholder="Aucun dossier choisi"
+          className="champ flex-1 font-mono text-petit"
+        />
+        <button onClick={() => void choisir(cle)} className="bouton-discret shrink-0">
+          Parcourir…
+        </button>
+      </div>
+    </Champ>
+  );
+
   return (
-    <div className="mx-auto max-w-3xl space-y-8 p-6">
-      <section className="space-y-4">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-zinc-500">
-          Dossiers surveillés
-        </h2>
-        {([
-          ["dossierAchats", "Dossier des factures d'achat"],
-          ["dossierVentes", "Dossier des factures de vente"],
-        ] as const).map(([cle, label]) => (
-          <Champ key={cle} label={label}>
-            <div className="mt-1.5 flex gap-2">
-              <input
-                readOnly value={p[cle]}
-                placeholder="Aucun dossier sélectionné"
-                className="flex-1 rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 font-mono text-sm dark:border-zinc-800 dark:bg-zinc-900"
-              />
-              <button
-                onClick={() => void choisir(cle)}
-                className="rounded-lg border border-zinc-300 px-3 py-2 text-sm hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-800"
+    <div className="flex h-full min-h-0">
+      {/* Navigation par rubrique : chaque écran tient sans défilement. */}
+      <nav className="w-60 shrink-0 border-r border-trait bg-releve p-2">
+        {RUBRIQUES.map(({ cle, libelle, aide }) => {
+          const actif = rubrique === cle;
+          const restant = manquantsDe(cle);
+          return (
+            <button
+              key={cle}
+              onClick={() => setRubrique(cle)}
+              aria-current={actif ? "page" : undefined}
+              className={[
+                "mb-0.5 flex w-full items-center gap-2 rounded-bloc px-3 py-2 text-left",
+                "transition-colors duration-rapide",
+                actif ? "bg-surface shadow-[inset_2px_0_0_rgb(var(--vert))]" : "hover:bg-surface/60",
+              ].join(" ")}
+            >
+              <span className="min-w-0 flex-1">
+                <span className={`block text-petit ${actif ? "font-medium" : ""}`}>{libelle}</span>
+                <span className="block truncate text-micro text-doux">{aide}</span>
+              </span>
+              {restant > 0 && (
+                <span className="tabulaire rounded-bloc bg-attente/15 px-1.5 font-mono text-micro text-attente">
+                  {restant}
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </nav>
+
+      <div className="flex min-w-0 flex-1 flex-col">
+        <div className="min-h-0 flex-1 overflow-auto">
+          <div className="max-w-2xl space-y-5 p-6">
+            {rubrique === "dossiers" && (
+              <>
+                <p className="text-petit text-doux">
+                  Tout fichier déposé dans ces dossiers part vers Pennylane.
+                  Un dossier réseau fonctionne.
+                </p>
+                <DossierChamp cle="dossierAchats" label="Factures d'achat" />
+                <DossierChamp cle="dossierVentes" label="Factures de vente" />
+                {p.dossierAchats && p.dossierAchats === p.dossierVentes && (
+                  <p className="text-petit text-refus">
+                    Les deux dossiers sont identiques : vos ventes partiraient vers les achats.
+                  </p>
+                )}
+              </>
+            )}
+
+            {rubrique === "pennylane" && (
+              <>
+                <p className="text-petit text-doux">
+                  À activer dans Pennylane : Paramètres Entreprise → Transmission
+                  factures → Adresses e-mail.
+                </p>
+                <Champ
+                  label="Adresse des achats"
+                  alerte={alerteDomaine(p.emailAchats, "@suppliers.pennylane.com", "d'achat")}
+                >
+                  <input
+                    value={p.emailAchats} onChange={(e) => set({ emailAchats: e.target.value })}
+                    placeholder="entreprise-xxxxxxxx@suppliers.pennylane.com"
+                    className="champ font-mono text-petit"
+                  />
+                </Champ>
+                <Champ
+                  label="Adresse des ventes"
+                  alerte={alerteDomaine(p.emailVentes, "@customers.pennylane.com", "de vente")}
+                >
+                  <input
+                    value={p.emailVentes} onChange={(e) => set({ emailVentes: e.target.value })}
+                    placeholder="entreprise-xxxxxxxx@customers.pennylane.com"
+                    className="champ font-mono text-petit"
+                  />
+                </Champ>
+              </>
+            )}
+
+            {rubrique === "envoi" && (
+              <>
+                <p className="text-petit text-doux">
+                  Utilisez un compte dédié plutôt que la boîte principale de l'entreprise.
+                </p>
+                <div className="grid grid-cols-[1fr_7rem] gap-3">
+                  <Champ label="Serveur SMTP">
+                    <input
+                      value={p.smtpHote} onChange={(e) => set({ smtpHote: e.target.value })}
+                      placeholder="smtp.votredomaine.fr" className="champ"
+                    />
+                  </Champ>
+                  <Champ label="Port">
+                    <input
+                      type="number" value={p.smtpPort}
+                      onChange={(e) => set({ smtpPort: Number(e.target.value) })}
+                      className="champ tabulaire"
+                    />
+                  </Champ>
+                </div>
+                <Champ label="Identifiant">
+                  <input
+                    value={p.smtpUtilisateur}
+                    onChange={(e) => set({ smtpUtilisateur: e.target.value })}
+                    className="champ"
+                  />
+                </Champ>
+                <Champ
+                  label="Mot de passe"
+                  aide={p.motDePasseDefini
+                    ? "Un mot de passe est enregistré. Laissez vide pour le garder."
+                    : "Sur Gmail ou Microsoft 365, il faut un mot de passe d'application."}
+                >
+                  <input
+                    type="password" value={motDePasse}
+                    onChange={(e) => setMotDePasse(e.target.value)}
+                    placeholder={p.motDePasseDefini ? "••••••••" : ""} className="champ"
+                  />
+                </Champ>
+                <Champ label="Adresse d'expédition">
+                  <input
+                    value={p.smtpExpediteur}
+                    onChange={(e) => set({ smtpExpediteur: e.target.value })}
+                    className="champ"
+                  />
+                </Champ>
+                <Champ label="Chiffrement">
+                  <select
+                    value={p.smtpChiffrement}
+                    onChange={(e) => set({ smtpChiffrement: e.target.value as ParametresUI["smtpChiffrement"] })}
+                    className="champ"
+                  >
+                    <option value="starttls">STARTTLS — port 587</option>
+                    <option value="tls">TLS implicite — port 465</option>
+                    <option value="aucun">Aucun</option>
+                  </select>
+                </Champ>
+                <div className="flex flex-wrap items-center gap-3">
+                  <button
+                    onClick={async () => setTest(await window.api.testerSmtp())}
+                    className="bouton-discret"
+                  >
+                    Tester la connexion
+                  </button>
+                  {test && (
+                    <p className={`text-petit ${test.ok ? "text-valide" : "text-refus"}`}>
+                      {test.message}
+                    </p>
+                  )}
+                </div>
+                <p className="text-petit text-doux">
+                  Le test utilise les valeurs déjà enregistrées : enregistrez d'abord.
+                </p>
+              </>
+            )}
+
+            {rubrique === "apparence" && (
+              <Champ
+                label="Thème"
+                aide="Le mode Windows suit le réglage du système, y compris s'il change en cours de journée."
               >
-                Parcourir…
-              </button>
-            </div>
-          </Champ>
-        ))}
-        {p.dossierAchats && p.dossierAchats === p.dossierVentes && (
-          <p className="text-sm text-red-600">
-            Les deux dossiers sont identiques : les ventes partiraient vers les achats.
-          </p>
-        )}
-      </section>
+                <div className="flex gap-1.5">
+                  {(["clair", "sombre", "systeme"] as Theme[]).map((cle) => (
+                    <button
+                      key={cle}
+                      onClick={() => set({ theme: cle })}
+                      aria-pressed={p.theme === cle}
+                      className={[
+                        "flex-1 rounded-bloc border px-3 py-2 text-petit transition-colors duration-rapide",
+                        p.theme === cle
+                          ? "border-vert bg-vert/8 text-encre"
+                          : "border-trait text-doux hover:bg-releve hover:text-encre",
+                      ].join(" ")}
+                    >
+                      {LIBELLES_THEME[cle]}
+                    </button>
+                  ))}
+                </div>
+              </Champ>
+            )}
 
-      <section className="space-y-4">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-zinc-500">
-          Adresses Pennylane
-        </h2>
-        <p className="text-sm text-zinc-500">
-          À activer dans Pennylane : Paramètres Entreprise → Transmission factures → Adresses e-mail.
-        </p>
-        <Champ
-          label="Adresse pour les achats"
-          aide={alerteDomaine(p.emailAchats, "@suppliers.pennylane.com", "d'achat")}
-        >
-          <input
-            value={p.emailAchats} onChange={(e) => set({ emailAchats: e.target.value })}
-            placeholder="entreprise-xxxxxxxx@suppliers.pennylane.com"
-            className={`${champClasses} font-mono`}
-          />
-        </Champ>
-        <Champ
-          label="Adresse pour les ventes"
-          aide={alerteDomaine(p.emailVentes, "@customers.pennylane.com", "de vente")}
-        >
-          <input
-            value={p.emailVentes} onChange={(e) => set({ emailVentes: e.target.value })}
-            placeholder="entreprise-xxxxxxxx@customers.pennylane.com"
-            className={`${champClasses} font-mono`}
-          />
-        </Champ>
-      </section>
+            {rubrique === "apropos" && (
+              <>
+                <dl className="divide-y divide-trait border-y border-trait">
+                  {([
+                    ["Application", "Nexora"],
+                    ["Version", apropos?.version ?? "—"],
+                    ["Auteur", apropos?.auteur ?? "FV"],
+                    ["Socle technique", apropos ? `Electron ${apropos.electron}` : "—"],
+                  ] as const).map(([cle, valeur]) => (
+                    <div key={cle} className="flex items-baseline justify-between gap-4 py-2">
+                      <dt className="text-petit text-doux">{cle}</dt>
+                      <dd className="tabulaire font-mono text-petit">{valeur}</dd>
+                    </div>
+                  ))}
+                </dl>
 
-      <section className="space-y-4">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-zinc-500">
-          Serveur d'envoi
-        </h2>
-        <div className="grid grid-cols-3 gap-3">
-          <div className="col-span-2">
-            <Champ label="Serveur SMTP">
-              <input value={p.smtpHote} onChange={(e) => set({ smtpHote: e.target.value })}
-                placeholder="smtp.votredomaine.fr" className={champClasses} />
-            </Champ>
+                <div className="space-y-2">
+                  <div className="flex flex-wrap items-center gap-3">
+                    <button
+                      onClick={() => void window.api.majVerifier()}
+                      disabled={maj.phase === "verification" || maj.phase === "telechargement"}
+                      className="bouton-discret disabled:opacity-50"
+                    >
+                      Rechercher une mise à jour
+                    </button>
+                    {maj.phase === "prete" && (
+                      <button onClick={() => void window.api.majInstaller()} className="bouton-principal">
+                        Redémarrer et installer
+                      </button>
+                    )}
+                  </div>
+                  {maj.phase !== "inactif" && (
+                    <p className={`text-petit ${maj.phase === "erreur" ? "text-refus" : "text-doux"}`}>
+                      {MESSAGE_MAJ[maj.phase](maj)}
+                    </p>
+                  )}
+                  <p className="text-petit text-doux">
+                    Nexora vérifie les mises à jour au démarrage. Rien ne s'installe
+                    sans votre accord, et vos réglages comme votre historique sont
+                    conservés d'une version à l'autre.
+                  </p>
+                </div>
+              </>
+            )}
+
+            {rubrique === "fonctionnement" && (
+              <>
+                <Champ label="Premier mois de l'exercice comptable"
+                       aide="Sert au filtre « Exercice courant » de la liste.">
+                  <select
+                    value={p.moisDebutExercice}
+                    onChange={(e) => set({ moisDebutExercice: Number(e.target.value) })}
+                    className="champ"
+                  >
+                    {MOIS.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
+                  </select>
+                </Champ>
+                <Champ label="Délai avant envoi"
+                       aide="Laisse le temps à un fichier copié depuis le réseau d'arriver entièrement.">
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number" min={1} max={60}
+                      value={Math.round(p.delaiStabiliteMs / 1000)}
+                      onChange={(e) => set({ delaiStabiliteMs: Number(e.target.value) * 1000 })}
+                      className="champ tabulaire w-24"
+                    />
+                    <span className="text-petit text-doux">secondes</span>
+                  </div>
+                </Champ>
+                {([
+                  ["demarrageAutomatique", "Démarrer avec Windows"],
+                  ["reduireDansBarre", "Fermer la fenêtre réduit dans la zone de notification"],
+                ] as const).map(([cle, label]) => (
+                  <label key={cle} className="flex items-center gap-2.5 text-petit">
+                    <input
+                      type="checkbox" checked={p[cle]}
+                      onChange={(e) => set({ [cle]: e.target.checked } as Partial<ParametresUI>)}
+                      className="h-4 w-4 rounded-bloc border-trait accent-vert"
+                    />
+                    {label}
+                  </label>
+                ))}
+              </>
+            )}
           </div>
-          <Champ label="Port">
-            <input type="number" value={p.smtpPort}
-              onChange={(e) => set({ smtpPort: Number(e.target.value) })}
-              className={`${champClasses} tabulaire`} />
-          </Champ>
         </div>
-        <Champ label="Identifiant">
-          <input value={p.smtpUtilisateur} onChange={(e) => set({ smtpUtilisateur: e.target.value })}
-            className={champClasses} />
-        </Champ>
-        <Champ
-          label="Mot de passe"
-          aide={
-            p.motDePasseDefini
-              ? "Un mot de passe est enregistré. Laissez vide pour le conserver."
-              : "Sur Gmail ou Microsoft 365, utilisez un mot de passe d'application."
-          }
-        >
-          <input type="password" value={motDePasse} onChange={(e) => setMotDePasse(e.target.value)}
-            placeholder={p.motDePasseDefini ? "••••••••" : ""} className={champClasses} />
-        </Champ>
-        <Champ label="Adresse d'expédition">
-          <input value={p.smtpExpediteur} onChange={(e) => set({ smtpExpediteur: e.target.value })}
-            className={champClasses} />
-        </Champ>
-        <Champ label="Chiffrement">
-          <select value={p.smtpChiffrement}
-            onChange={(e) => set({ smtpChiffrement: e.target.value as any })}
-            className={champClasses}>
-            <option value="starttls">STARTTLS (port 587)</option>
-            <option value="tls">TLS implicite (port 465)</option>
-            <option value="aucun">Aucun</option>
-          </select>
-        </Champ>
 
-        <div className="flex items-center gap-3">
-          <button
-            onClick={async () => setTest(await window.api.testerSmtp())}
-            className="rounded-lg border border-zinc-300 px-3 py-2 text-sm hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-800"
-          >
-            Tester la connexion
-          </button>
-          {test && (
-            <p className={`text-sm ${test.ok ? "text-emerald-600" : "text-red-600"}`}>
-              {test.message}
-            </p>
+        <div className="flex items-center gap-3 border-t border-trait bg-papier px-6 py-3">
+          <button onClick={enregistrer} className="bouton-principal">Enregistrer</button>
+          {enregistre && <span className="text-petit text-valide">Paramètres enregistrés.</span>}
+          {p.manquants.length > 0 && (
+            <span className="text-petit text-attente">
+              Reste à renseigner : {p.manquants.join(", ")}.
+            </span>
           )}
         </div>
-        <p className="text-xs text-zinc-500">
-          Enregistrez avant de tester : le test utilise les valeurs déjà sauvegardées.
-        </p>
-      </section>
-
-      <section className="space-y-4">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-zinc-500">
-          Comportement
-        </h2>
-        <Champ label="Premier mois de l'exercice comptable"
-               aide="Sert au filtre « Exercice courant » de la liste.">
-          <select value={p.moisDebutExercice}
-            onChange={(e) => set({ moisDebutExercice: Number(e.target.value) })}
-            className={champClasses}>
-            {MOIS.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
-          </select>
-        </Champ>
-        <Champ label="Délai avant envoi (secondes)"
-               aide="Laisse le temps à un fichier copié depuis le réseau d'arriver entièrement.">
-          <input type="number" min={1} max={60}
-            value={Math.round(p.delaiStabiliteMs / 1000)}
-            onChange={(e) => set({ delaiStabiliteMs: Number(e.target.value) * 1000 })}
-            className={`${champClasses} tabulaire`} />
-        </Champ>
-        {([
-          ["demarrageAutomatique", "Démarrer avec Windows"],
-          ["reduireDansBarre", "Réduire dans la zone de notification au lieu de fermer"],
-        ] as const).map(([cle, label]) => (
-          <label key={cle} className="flex items-center gap-2.5 text-sm">
-            <input type="checkbox" checked={p[cle]}
-              onChange={(e) => set({ [cle]: e.target.checked } as any)}
-              className="h-4 w-4 rounded accent-indigo-600" />
-            {label}
-          </label>
-        ))}
-      </section>
-
-      <div className="sticky bottom-0 flex items-center gap-3 border-t border-zinc-200 bg-zinc-50/95 py-4 backdrop-blur dark:border-zinc-800 dark:bg-zinc-950/95">
-        <button
-          onClick={enregistrer}
-          className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500"
-        >
-          Enregistrer
-        </button>
-        {enregistre && <span className="text-sm text-emerald-600">Paramètres enregistrés.</span>}
-        {p.manquants.length > 0 && (
-          <span className="text-sm text-amber-700 dark:text-amber-400">
-            Encore à renseigner : {p.manquants.join(", ")}.
-          </span>
-        )}
       </div>
     </div>
   );

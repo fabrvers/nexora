@@ -1,62 +1,132 @@
-import { useEffect, useState } from "react";
-import type { ParametresUI } from "./lib/api";
+import { useCallback, useEffect, useState } from "react";
+import type { DocumentLigne, ParametresUI } from "./lib/api";
+import { appliquerTheme } from "./lib/theme";
+import { STATUTS } from "./lib/statuts";
 import { Documents } from "./pages/Documents";
 import { Parametres } from "./pages/Parametres";
+import { VoileDepot } from "./components/ZoneDepot";
+
+type Vue = "achat" | "vente" | "parametres";
 
 export default function App() {
-  const [vue, setVue] = useState<"documents" | "parametres">("documents");
+  const [vue, setVue] = useState<Vue>("achat");
   const [parametres, setParametres] = useState<ParametresUI | null>(null);
+  const [documents, setDocuments] = useState<DocumentLigne[]>([]);
+  const [version, setVersion] = useState<string>("");
+
+  const recharger = useCallback(async () => {
+    setDocuments(await window.api.documents());
+  }, []);
+
+  useEffect(() => {
+    void recharger();
+    return window.api.surChangement(() => void recharger());
+  }, [recharger]);
+
+  useEffect(() => window.api.surNavigation(() => setVue("parametres")), []);
+  useEffect(() => { void window.api.version().then((v) => setVersion(v.version)); }, []);
 
   useEffect(() => {
     void window.api.parametres().then((p) => {
       setParametres(p);
-      // Premiere ouverture : on emmene directement l'utilisateur au bon endroit.
       if (p.manquants.length) setVue("parametres");
     });
   }, []);
 
+  useEffect(() => appliquerTheme(parametres?.theme ?? "clair"), [parametres?.theme]);
+
+  const deposer = useCallback(async (flux: "achat" | "vente", chemins: string[]) => {
+    if (!chemins.length) return;
+    await window.api.deposer(flux, chemins);
+    setVue(flux);
+  }, []);
+
+  const aTraiter = (flux: "achat" | "vente") =>
+    documents.filter((d) => d.flux === flux && STATUTS[d.statut].action).length;
+
+  const Onglet = ({ cle, libelle }: { cle: Vue; libelle: string }) => {
+    const choisi = vue === cle;
+    const alertes = cle === "parametres" ? 0 : aTraiter(cle);
+    return (
+      <button
+        onClick={() => setVue(cle)}
+        aria-current={choisi ? "page" : undefined}
+        className={[
+          "relative flex items-center gap-2 px-1 pb-3 pt-1 text-base transition-colors duration-rapide",
+          choisi ? "text-white" : "text-white/60 hover:text-white/90",
+        ].join(" ")}
+      >
+        {libelle}
+        {alertes > 0 && (
+          <span className="tabulaire rounded-bloc bg-white/15 px-1.5 py-0.5 font-mono text-micro">
+            {alertes}
+          </span>
+        )}
+        {choisi && <span className="absolute inset-x-0 bottom-0 h-0.5 bg-vert" />}
+      </button>
+    );
+  };
+
+  const incomplet = parametres && parametres.manquants.length > 0;
+
   return (
-    <div className="flex h-screen flex-col">
-      <header className="flex items-center gap-6 border-b border-zinc-200 px-5 py-3 dark:border-zinc-800">
-        <h1 className="text-sm font-semibold">Passerelle Pennylane</h1>
-        <nav className="flex gap-1">
-          {([["documents", "Documents"], ["parametres", "Paramètres"]] as const).map(
-            ([cle, libelle]) => (
-              <button
-                key={cle}
-                onClick={() => setVue(cle)}
-                aria-current={vue === cle}
-                className={[
-                  "rounded-lg px-3 py-1.5 text-sm transition-colors",
-                  vue === cle
-                    ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
-                    : "text-zinc-600 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800",
-                ].join(" ")}
-              >
-                {libelle}
-              </button>
-            ),
+    <div className="flex h-full flex-col">
+      {/* Bandeau marine repris du logo : il ancre l'application et separe
+          nettement la navigation du plan de travail. */}
+      <header className="flex items-end gap-6 bg-marine px-5 pt-3 text-white">
+        <div className="flex items-center gap-2.5 pb-2.5">
+          <img src="./icone.png" alt="" className="h-6 w-6 rounded-[3px]" />
+          <p className="font-titre text-titre tracking-tight">Nexora</p>
+          {version && (
+            <span className="tabulaire font-mono text-micro text-white/40">v{version}</span>
           )}
+        </div>
+
+        <nav className="flex items-end gap-5">
+          <Onglet cle="achat" libelle="Factures d'achat" />
+          <Onglet cle="vente" libelle="Factures de vente" />
         </nav>
-        {parametres && parametres.manquants.length > 0 && vue === "documents" && (
+
+        <div className="ml-auto flex items-center gap-2 pb-2.5">
+          {incomplet && vue !== "parametres" && (
+            <button
+              onClick={() => setVue("parametres")}
+              className="rounded-bloc bg-attente/20 px-2.5 py-1 text-petit text-attente"
+            >
+              Surveillance à l'arrêt — configuration incomplète
+            </button>
+          )}
           <button
             onClick={() => setVue("parametres")}
-            className="ml-auto rounded-lg bg-amber-100 px-3 py-1.5 text-sm text-amber-900 hover:bg-amber-200 dark:bg-amber-950 dark:text-amber-200"
+            aria-current={vue === "parametres" ? "page" : undefined}
+            className={[
+              "rounded-bloc px-2.5 py-1 text-petit transition-colors duration-rapide",
+              vue === "parametres"
+                ? "bg-white/15 text-white"
+                : "text-white/60 hover:bg-white/10 hover:text-white",
+            ].join(" ")}
           >
-            Configuration incomplète — la surveillance est à l'arrêt
+            Paramètres
           </button>
-        )}
+        </div>
       </header>
 
-      <main className="min-h-0 flex-1 overflow-hidden">
-        {vue === "documents" ? (
-          <Documents moisDebutExercice={parametres?.moisDebutExercice ?? 1} />
+      <main className="min-h-0 flex-1">
+        {vue === "parametres" ? (
+          <Parametres onEnregistre={setParametres} />
         ) : (
-          <div className="h-full overflow-auto">
-            <Parametres onEnregistre={setParametres} />
-          </div>
+          <Documents
+            key={vue}
+            flux={vue}
+            libelle={vue === "achat" ? "Factures d'achat" : "Factures de vente"}
+            documents={documents}
+            moisDebutExercice={parametres?.moisDebutExercice ?? 1}
+            onDepot={deposer}
+          />
         )}
       </main>
+
+      {!incomplet && <VoileDepot onDepot={deposer} />}
     </div>
   );
 }

@@ -20,6 +20,7 @@ export interface Parametres {
   smtpChiffrement: "starttls" | "tls" | "aucun";
   delaiStabiliteMs: number;
   moisDebutExercice: number;
+  theme: "clair" | "sombre" | "systeme";
   demarrageAutomatique: boolean;
   reduireDansBarre: boolean;
   configure: boolean;
@@ -37,6 +38,7 @@ const DEFAUTS: Parametres = {
   smtpChiffrement: "starttls",
   delaiStabiliteMs: 2000,
   moisDebutExercice: 1,
+  theme: "clair",
   demarrageAutomatique: true,
   reduireDansBarre: true,
   configure: false,

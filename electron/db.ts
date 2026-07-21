@@ -107,6 +107,22 @@ export function majStatut(id: number, champs: Partial<Document>): void {
   planifierEcriture();
 }
 
+/**
+ * Retire des documents de l'historique.
+ *
+ * Attention : le fichier reste sur le disque. S'il est encore dans un dossier
+ * surveille, il sera redetecte au prochain balayage et retransmis. C'est
+ * l'appelant qui decide d'effacer aussi le fichier.
+ */
+export function supprimer(ids: number[]): number {
+  const aRetirer = new Set(ids);
+  const avant = etat.documents.length;
+  etat.documents = etat.documents.filter((d) => !aRetirer.has(d.id));
+  reindexer();
+  planifierEcriture();
+  return avant - etat.documents.length;
+}
+
 /** Compteurs par statut, pour la barre de filtres. */
 export function compteurs(): Record<string, number> {
   const total: Record<string, number> = {};

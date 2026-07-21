@@ -7,8 +7,8 @@
 
 export type ClePeriode =
   | "tout"
-  | "mois_courant" | "mois_precedent"
-  | "annee_courante" | "annee_precedente"
+  | "mois_courant" | "mois_precedent" | "mois_choisi"
+  | "annee_courante" | "annee_precedente" | "annee_choisie"
   | "semestre_1" | "semestre_2"
   | "exercice_courant"
   | "personnalisee";
@@ -27,6 +27,10 @@ export interface OptionsPeriode {
   /** Bornes saisies pour la periode personnalisee. */
   debutPersonnalise?: Date;
   finPersonnalisee?: Date;
+  /** Mois retenu pour « Mois au choix », au format AAAA-MM. */
+  moisChoisi?: string;
+  /** Annee retenue pour « Annee au choix ». */
+  anneeChoisie?: number;
 }
 
 const jour = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
@@ -45,6 +49,21 @@ export function bornes(cle: ClePeriode, options: OptionsPeriode): Bornes | null 
 
     case "mois_precedent":
       return { debut: new Date(annee, mois - 1, 1), fin: new Date(annee, mois, 1) };
+
+    case "mois_choisi": {
+      if (!options.moisChoisi) return null;
+      const [an, mo] = options.moisChoisi.split("-").map(Number);
+      if (!an || !mo) return null;
+      return { debut: new Date(an, mo - 1, 1), fin: new Date(an, mo, 1) };
+    }
+
+    case "annee_choisie": {
+      if (!options.anneeChoisie) return null;
+      return {
+        debut: new Date(options.anneeChoisie, 0, 1),
+        fin: new Date(options.anneeChoisie + 1, 0, 1),
+      };
+    }
 
     case "annee_courante":
       return { debut: new Date(annee, 0, 1), fin: new Date(annee + 1, 0, 1) };
@@ -92,8 +111,10 @@ export const LIBELLES_PERIODE: Record<ClePeriode, string> = {
   tout: "Toute la période",
   mois_courant: "Ce mois-ci",
   mois_precedent: "Mois précédent",
+  mois_choisi: "Mois au choix…",
   annee_courante: "Cette année",
   annee_precedente: "Année précédente",
+  annee_choisie: "Année au choix…",
   semestre_1: "1er semestre",
   semestre_2: "2nd semestre",
   exercice_courant: "Exercice courant",

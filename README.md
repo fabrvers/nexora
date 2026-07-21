@@ -1,4 +1,4 @@
-# Passerelle Pennylane — application Windows
+# Nexora — application Windows
 
 Surveille deux dossiers, transmet les factures à Pennylane dès leur dépôt, et
 bloque tout document qui n'en est pas une.
@@ -21,7 +21,7 @@ Pour obtenir directement l'installeur `.exe`, voir **COMPILER.md**.
 npm install
 npm run dev      # application en mode développement
 npm test         # 34 tests : classification, lecture PDF, périodes, stockage
-npm run package  # produit release/Passerelle-Pennylane-Setup-1.0.0.exe
+npm run package  # produit release/Nexora-Installeur-1.0.0.exe
 ```
 
 ## Organisation

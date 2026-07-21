@@ -1,10 +1,10 @@
-import { STATUTS, type CleStatut } from "../lib/statuts";
+import { ORDRE_STATUTS, STATUTS, type CleStatut } from "../lib/statuts";
 
 /**
- * Filtres par statut, avec compteurs.
+ * Filtres par statut, avec compteurs permanents.
  *
- * C'est la piece maitresse de la lisibilite : le nombre de documents bloques
- * est visible en permanence, sans deplier de menu.
+ * Les statuts demandant une action sont places en tete : c'est ce que
+ * l'utilisateur doit voir sans chercher.
  */
 export function BarreStatuts({
   compteurs, actif, onChange,
@@ -14,37 +14,39 @@ export function BarreStatuts({
   onChange: (cle: CleStatut | "tout") => void;
 }) {
   const total = Object.values(compteurs).reduce((a, b) => a + b, 0);
-  const ordre: CleStatut[] = ["transmise", "en_attente", "a_verifier", "bloquee", "echec", "ignoree"];
 
-  const Bouton = ({ cle, libelle, nombre, point }: {
+  const Onglet = ({ cle, libelle, nombre, point }: {
     cle: CleStatut | "tout"; libelle: string; nombre: number; point?: string;
   }) => {
-    const selectionne = actif === cle;
+    const choisi = actif === cle;
+    const vide = nombre === 0 && cle !== "tout";
     return (
       <button
         onClick={() => onChange(cle)}
-        aria-pressed={selectionne}
+        aria-pressed={choisi}
+        disabled={vide}
         className={[
-          "group flex items-center gap-2 rounded-lg border px-3 py-2 text-sm transition-colors",
-          selectionne
-            ? "border-indigo-500 bg-indigo-50 text-indigo-900 dark:bg-indigo-950 dark:text-indigo-100"
-            : "border-zinc-200 bg-white hover:border-zinc-300 dark:border-zinc-800 dark:bg-zinc-900 dark:hover:border-zinc-700",
-        ].join(" ")}
+          "flex items-center gap-2 rounded-bloc border px-2.5 py-1.5 text-petit",
+          "transition-colors duration-rapide",
+          choisi
+            ? "border-vert bg-vert/8 text-encre"
+            : "border-transparent text-doux hover:bg-releve hover:text-encre",
+          vide && "opacity-40 hover:bg-transparent",
+        ].filter(Boolean).join(" ")}
       >
         {point && <span className={`point ${point}`} />}
         <span>{libelle}</span>
-        <span className="tabulaire rounded bg-zinc-100 px-1.5 text-xs font-medium text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">
-          {nombre}
-        </span>
+        <span className="tabulaire font-mono text-micro">{nombre}</span>
       </button>
     );
   };
 
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      <Bouton cle="tout" libelle="Tous" nombre={total} />
-      {ordre.map((cle) => (
-        <Bouton
+    <div className="flex flex-wrap items-center gap-1">
+      <Onglet cle="tout" libelle="Tous" nombre={total} />
+      <span className="mx-1 h-4 w-px bg-trait" />
+      {ORDRE_STATUTS.map((cle) => (
+        <Onglet
           key={cle}
           cle={cle}
           libelle={STATUTS[cle].libelle}

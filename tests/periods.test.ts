@@ -60,3 +60,20 @@ test("toute la periode ne filtre rien", () => {
   assert.equal(bornes("tout", base), null);
   assert.ok(dansPeriode(new Date(1999, 0, 1), null));
 });
+
+test("mois au choix", () => {
+  const b = bornes("mois_choisi", { ...base, moisChoisi: "2026-03" })!;
+  assert.ok(dansPeriode(new Date(2026, 2, 15), b), "mars 2026 doit y être");
+  assert.ok(!dansPeriode(new Date(2026, 3, 1), b), "avril doit en sortir");
+  assert.ok(!dansPeriode(new Date(2026, 1, 28), b), "février doit en sortir");
+});
+
+test("mois au choix sans valeur ne filtre pas", () => {
+  assert.equal(bornes("mois_choisi", base), null);
+});
+
+test("année au choix", () => {
+  const b = bornes("annee_choisie", { ...base, anneeChoisie: 2024 })!;
+  assert.ok(dansPeriode(new Date(2024, 11, 31), b));
+  assert.ok(!dansPeriode(new Date(2025, 0, 1), b));
+});

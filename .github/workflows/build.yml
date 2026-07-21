@@ -15,6 +15,10 @@ on:
 jobs:
   build:
     runs-on: windows-latest
+    # Necessaire pour qu'electron-builder puisse creer la publication
+    # GitHub et y deposer l'installeur ainsi que latest.yml.
+    permissions:
+      contents: write
 
     steps:
       - uses: actions/checkout@v4
@@ -34,7 +38,11 @@ jobs:
         run: npm test
 
       - name: Compiler l'installeur
-        run: npm run package
+        # Sur un tag, electron-builder publie lui-meme l'installeur ET le
+        # fichier latest.yml dont l'application a besoin pour detecter les
+        # nouvelles versions. Sans ce fichier, la mise a jour automatique
+        # ne peut pas fonctionner.
+        run: npm run package -- --publish ${{ startsWith(github.ref, 'refs/tags/v') && 'always' || 'never' }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -45,8 +53,3 @@ jobs:
           path: release/*.exe
           retention-days: 30
 
-      - name: Attacher à la release sur un tag
-        if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@v2
-        with:
-          files: release/*.exe

@@ -1,23 +1,32 @@
-appId: fr.passerelle.pennylane
-productName: Passerelle Pennylane
-copyright: ""
+appId: fr.fv.nexora
+productName: Nexora
+copyright: © 2026 FV
 directories:
   output: release
-  buildResources: build      # contient icon.ico
+  buildResources: build
 files:
   - dist
   - dist-electron
 win:
   target: nsis
   icon: build/icon.ico
-  artifactName: Passerelle-Pennylane-Setup-${version}.exe
+  artifactName: Nexora-Installeur-${version}.exe
+publish:
+  provider: github
+  owner: fabrvers
+  repo: nexora
+
 nsis:
   oneClick: false
   perMachine: false                       # installation sans droits administrateur
   allowToChangeInstallationDirectory: true
   createDesktopShortcut: true
   createStartMenuShortcut: true
-  shortcutName: Passerelle Pennylane
+  shortcutName: Nexora
+  # Une reinstallation par-dessus met a jour l'existant sans redemander
+  # le dossier, et ne touche pas aux donnees de %APPDATA%.
+  deleteAppDataOnUninstall: false
+  runAfterFinish: true
   installerLanguages:
     - fr_FR
-  language: "1036"                        # francais
+  language: "1036"

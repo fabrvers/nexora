@@ -1,5 +1,5 @@
 /** Processus principal : fenetre, icone de notification, ponts IPC. */
-import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, Notification, shell, Tray } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, nativeTheme, Notification, shell, Tray } from "electron";
 import archiver from "archiver";
 import fs from "node:fs";
 import path from "node:path";
@@ -7,6 +7,8 @@ import * as db from "./db.js";
 import { tester } from "./mailer.js";
 import * as parametres from "./settings.js";
 import { arreter, balayer, demarrer, transmettre } from "./watcher.js";
+import { construireMenu } from "./menu.js";
+import { initialiserMaj } from "./maj.js";
 
 let fenetre: BrowserWindow | null = null;
 let icone: Tray | null = null;
@@ -15,14 +17,32 @@ let quitteVraiment = false;
 const DEV = !app.isPackaged;
 
 function creerFenetre(): void {
+  construireMenu({
+    analyser: () => void balayer(),
+    ouvrirParametres: () => fenetre?.webContents.send("aller-a:parametres"),
+    verifierMaj: () => void fenetre?.webContents.send("aller-a:parametres"),
+    version: () => versionApplication(),
+    ouvrirDossier: (flux) => {
+      const p = parametres.lire();
+      const dossier = flux === "achat" ? p.dossierAchats : p.dossierVentes;
+      if (dossier) void shell.openPath(dossier);
+    },
+  });
+
   fenetre = new BrowserWindow({
     width: 1280,
     height: 800,
     minWidth: 1024,
     minHeight: 700,
+    // Cadre natif de Windows : c'est lui qui fournit les dispositions de
+    // fenetre au survol du bouton Agrandir sous Windows 11.
+    frame: true,
+    maximizable: true,
     show: false,
-    backgroundColor: "#0b0d10",
-    title: "Passerelle Pennylane",
+    // Couleur de fond avant le premier rendu : evite un flash blanc en
+    // theme sombre, et inversement.
+    backgroundColor: nativeTheme.shouldUseDarkColors ? "#0d1015" : "#f4f6f9",
+    title: "Nexora",
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
@@ -34,6 +54,7 @@ function creerFenetre(): void {
   else void fenetre.loadFile(path.join(__dirname, "../dist/index.html"));
 
   fenetre.once("ready-to-show", () => fenetre?.show());
+  initialiserMaj(fenetre, ipcMain);
 
   fenetre.on("close", (evenement) => {
     // Fermer la fenetre ne doit pas arreter la surveillance.
@@ -60,7 +81,7 @@ function cheminIcone(): string | null {
 function creerIcone(): void {
   const chemin = cheminIcone();
   icone = new Tray(chemin ? chemin : nativeImage.createEmpty());
-  icone.setToolTip("Passerelle Pennylane");
+  icone.setToolTip("Nexora");
   icone.setContextMenu(
     Menu.buildFromTemplate([
       { label: "Ouvrir", click: () => fenetre?.show() },
@@ -77,9 +98,7 @@ function majBadge(): void {
   const c = db.compteurs();
   const enAttenteAction = (c.bloquee ?? 0) + (c.a_verifier ?? 0) + (c.echec ?? 0);
   icone?.setToolTip(
-    enAttenteAction
-      ? `Passerelle Pennylane — ${enAttenteAction} document(s) à traiter`
-      : "Passerelle Pennylane",
+    enAttenteAction ? `Nexora — ${enAttenteAction} document(s) à traiter` : "Nexora",
   );
   // setBadgeCount n'est pas pris en charge partout : un echec ici ne doit
   // pas empecher l'application de tourner.
@@ -164,7 +183,137 @@ ipcMain.handle("documents:telecharger", async (_e, ids: number[]) => {
   return { ok: true, message: `${docs.length} documents enregistrés` };
 });
 
+/**
+ * Supprime des lignes de l'historique et envoie les fichiers a la corbeille.
+ *
+ * Les deux vont ensemble : garder le fichier dans le dossier surveille tout
+ * en oubliant son empreinte le ferait redetecter, donc renvoyer, au balayage
+ * suivant. La corbeille laisse une porte de sortie en cas d'erreur.
+ */
+/**
+ * Suppression de lignes.
+ *
+ * L'application decide seule du sort du fichier, pour eviter a l'utilisateur
+ * un choix technique a chaque clic :
+ *   - fichier encore dans un dossier surveille  -> ligne + fichier a la corbeille ;
+ *     sans cela, il serait redetecte au prochain balayage et renvoye a Pennylane ;
+ *   - fichier absent, deplace, ou range ailleurs -> seule la ligne est retiree.
+ *
+ * Un fichier situe hors des dossiers surveilles n'est jamais touche : il ne
+ * releve pas de cette application.
+ */
+ipcMain.handle("documents:supprimer", async (_e, ids: number[]) => {
+  const docs = ids.map(db.parId).filter(Boolean) as db.Document[];
+  if (!docs.length) return { supprimes: 0, fichiersEffaces: 0 };
+
+  const p = parametres.lire();
+  const dossiers = [p.dossierAchats, p.dossierVentes]
+    .filter(Boolean)
+    .map((d) => path.resolve(d));
+
+  const avecFichier = docs.filter(
+    (d) => fs.existsSync(d.chemin) && dossiers.includes(path.dirname(path.resolve(d.chemin))),
+  );
+  const sansFichier = docs.length - avecFichier.length;
+
+  const lignes: string[] = [];
+  if (avecFichier.length) {
+    lignes.push(
+      avecFichier.length === 1
+        ? "1 fichier sera envoyé à la corbeille Windows, avec sa ligne."
+        : `${avecFichier.length} fichiers seront envoyés à la corbeille Windows, avec leurs lignes.`,
+    );
+    lignes.push(
+      "Sans cela, ils seraient de nouveau détectés au prochain balayage et retransmis à Pennylane.",
+    );
+  }
+  if (sansFichier) {
+    if (lignes.length) lignes.push("");
+    lignes.push(
+      sansFichier === 1
+        ? "1 ligne sera simplement retirée : son fichier n'est plus dans un dossier surveillé."
+        : `${sansFichier} lignes seront simplement retirées : leurs fichiers ne sont plus dans un dossier surveillé.`,
+    );
+  }
+
+  const reponse = await dialog.showMessageBox(fenetre!, {
+    type: "warning",
+    title: "Supprimer",
+    message: docs.length === 1
+      ? `Supprimer « ${docs[0].nom_fichier} » ?`
+      : `Supprimer ces ${docs.length} documents ?`,
+    detail: lignes.join("\n"),
+    buttons: ["Annuler", "Supprimer"],
+    defaultId: 1,
+    cancelId: 0,
+    noLink: true,
+  });
+
+  if (reponse.response !== 1) return { supprimes: 0, fichiersEffaces: 0 };
+
+  let fichiersEffaces = 0;
+  for (const doc of avecFichier) {
+    try {
+      // Corbeille et non suppression definitive : sur des pieces comptables,
+      // une erreur de clic doit rester rattrapable.
+      await shell.trashItem(doc.chemin);
+      fichiersEffaces++;
+    } catch {
+      /* fichier verrouille : la ligne part quand meme */
+    }
+  }
+
+  const supprimes = db.supprimer(docs.map((d) => d.id));
+  notifier("document:maj");
+  return { supprimes, fichiersEffaces };
+});
+
 ipcMain.handle("dossiers:balayer", () => balayer());
+
+ipcMain.handle("documents:choisir-fichiers", async () => {
+  const resultat = await dialog.showOpenDialog({
+    properties: ["openFile", "multiSelections"],
+    filters: [{ name: "Justificatifs", extensions: ["pdf", "jpg", "jpeg", "png"] }],
+  });
+  return resultat.canceled ? [] : resultat.filePaths;
+});
+
+/**
+ * Copie les fichiers deposes dans le dossier surveille du flux, puis laisse
+ * la surveillance faire son travail habituel. Un fichier deja present dans
+ * le dossier n'est pas duplique.
+ */
+ipcMain.handle("documents:deposer", async (_e, flux: "achat" | "vente", chemins: string[]) => {
+  const p = parametres.lire();
+  const cible = flux === "achat" ? p.dossierAchats : p.dossierVentes;
+  if (!cible) return { ajoutes: 0, ignores: chemins.length };
+
+  let ajoutes = 0;
+  let ignores = 0;
+
+  for (const source of chemins) {
+    try {
+      if (!fs.existsSync(source) || fs.statSync(source).isDirectory()) { ignores++; continue; }
+      if (path.dirname(path.resolve(source)) === path.resolve(cible)) { ajoutes++; continue; }
+
+      // Jamais d'ecrasement : un homonyme recoit un suffixe.
+      const { name, ext } = path.parse(source);
+      let destination = path.join(cible, `${name}${ext}`);
+      let compteur = 1;
+      while (fs.existsSync(destination)) {
+        destination = path.join(cible, `${name}-${compteur}${ext}`);
+        compteur += 1;
+      }
+      fs.copyFileSync(source, destination);
+      ajoutes++;
+    } catch {
+      ignores++;
+    }
+  }
+
+  await balayer();
+  return { ajoutes, ignores };
+});
 ipcMain.handle("parametres:lire", () => ({
   ...parametres.lire(),
   motDePasseDefini: Boolean(parametres.lireMotDePasse()),
@@ -185,6 +334,32 @@ ipcMain.handle("parametres:choisir-dossier", async () => {
 });
 
 ipcMain.handle("parametres:tester-smtp", () => tester());
+
+/**
+ * Version de l'application.
+ *
+ * Hors paquet, app.getVersion() renvoie celle d'Electron : on lit alors
+ * directement le package.json pour ne pas afficher un numero trompeur.
+ */
+function versionApplication(): string {
+  if (app.isPackaged) return app.getVersion();
+  for (const racine of [app.getAppPath(), process.cwd(), path.join(__dirname, "..")]) {
+    try {
+      const contenu = fs.readFileSync(path.join(racine, "package.json"), "utf8");
+      const version = JSON.parse(contenu).version;
+      if (version) return version;
+    } catch {
+      /* on essaie l'emplacement suivant */
+    }
+  }
+  return app.getVersion();
+}
+
+ipcMain.handle("application:version", () => ({
+  version: versionApplication(),
+  auteur: "FV",
+  electron: process.versions.electron,
+}));
 
 // --- Cycle de vie ----------------------------------------------------------
 

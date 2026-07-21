@@ -11,7 +11,7 @@ publics. Vous poussez le code, elles rendent l'installeur.
 
 ### 1. Créer le dépôt
 
-Sur github.com, **New repository**. Nommez-le `passerelle-pennylane`. Laissez
+Sur github.com, **New repository**. Nommez-le `nexora`. Laissez
 tout par défaut et validez.
 
 ### 2. Envoyer le code
@@ -19,12 +19,12 @@ tout par défaut et validez.
 Si Git est installé sur votre poste :
 
 ```bash
-cd passerelle-pennylane-windows
+cd nexora
 git init
 git add .
 git commit -m "Version initiale"
 git branch -M main
-git remote add origin https://github.com/VOTRE-COMPTE/passerelle-pennylane.git
+git remote add origin https://github.com/VOTRE-COMPTE/nexora.git
 git push -u origin main
 ```
 
@@ -36,8 +36,8 @@ conserver les sous-dossiers, en particulier `.github/workflows/`.
 
 L'onglet **Actions** montre la compilation en cours, trois à cinq minutes.
 Une fois terminée, ouvrez le run et téléchargez l'artefact
-**Passerelle-Pennylane-Setup**. Il contient
-`Passerelle-Pennylane-Setup-1.0.0.exe`.
+**Nexora-Installeur**. Il contient
+`Nexora-Installeur-1.0.0.exe`.
 
 Pour les versions suivantes, un tag suffit :
 
@@ -66,13 +66,13 @@ Studio Build Tools.
 ### Compilation
 
 ```bash
-cd passerelle-pennylane-windows
+cd nexora
 npm install          # environ 3 minutes
 npm test             # 34 tests, doivent tous passer
 npm run package      # environ 5 minutes
 ```
 
-L'installeur apparaît dans `release/Passerelle-Pennylane-Setup-1.0.0.exe`.
+L'installeur apparaît dans `release/Nexora-Installeur-1.0.0.exe`.
 
 ### Voir l'application avant de compiler
 
@@ -96,7 +96,7 @@ l'interface s'affichent immédiatement.
 - Désinstallation par le panneau de configuration Windows classique.
 
 L'historique et les paramètres vivent dans
-`%APPDATA%\Passerelle Pennylane\`, hors du dossier d'installation : une mise à
+`%APPDATA%\Nexora\`, hors du dossier d'installation : une mise à
 jour ne les efface pas.
 
 ---
@@ -126,11 +126,33 @@ win:
 
 ---
 
-## Diffuser les mises à jour
+## Publier une mise à jour
 
-Sans mécanisme automatique, il vous faut redistribuer le `.exe` à chaque
-version : l'installeur écrase l'ancienne sans toucher aux données.
+Nexora se met à jour toute seule. Pour diffuser une nouvelle version :
 
-Si cela devient pénible sur plusieurs postes, `electron-updater` branché sur
-les Releases GitHub permet à l'application de se mettre à jour seule. À
-ajouter quand le besoin se fait sentir, pas avant.
+1. Modifiez le numéro dans `package.json`, par exemple `"version": "1.1.0"`
+2. Envoyez le code, puis posez un tag correspondant :
+
+```bash
+git tag v1.1.0
+git push --tags
+```
+
+GitHub compile l'installeur et publie dans les *Releases* le `.exe`
+accompagné du fichier `latest.yml`. **Ce fichier est indispensable** :
+c'est lui que l'application interroge pour savoir qu'une version plus
+récente existe.
+
+Les postes installés détectent la nouveauté au démarrage suivant,
+téléchargent en arrière-plan, puis proposent de redémarrer. Rien ne
+s'installe sans accord de l'utilisateur.
+
+Le numéro du tag doit correspondre à celui de `package.json`, sans quoi
+la détection ne fonctionnera pas.
+
+## Réinstaller par-dessus
+
+Relancer l'installeur sur un poste où Nexora est déjà présent met à jour
+l'installation existante : même dossier, mêmes raccourcis. Les réglages,
+le mot de passe SMTP et l'historique vivent dans `%APPDATA%\Nexora\` et
+ne sont jamais touchés, ni par une mise à jour ni par une désinstallation.

@@ -22,9 +22,19 @@ export interface ParametresUI {
   smtpHote: string; smtpPort: number; smtpUtilisateur: string;
   smtpExpediteur: string; smtpChiffrement: "starttls" | "tls" | "aucun";
   delaiStabiliteMs: number; moisDebutExercice: number;
+  theme: "clair" | "sombre" | "systeme";
   demarrageAutomatique: boolean; reduireDansBarre: boolean;
   configure: boolean; motDePasseDefini: boolean; manquants: string[];
 }
+
+export type EtatMaj =
+  | { phase: "inactif" }
+  | { phase: "verification" }
+  | { phase: "a-jour"; version: string }
+  | { phase: "disponible"; version: string }
+  | { phase: "telechargement"; pourcentage: number }
+  | { phase: "prete"; version: string }
+  | { phase: "erreur"; message: string };
 
 declare global {
   interface Window {
@@ -33,14 +43,25 @@ declare global {
       compteurs(): Promise<Record<string, number>>;
       envoyer(id: number): Promise<void>;
       ignorer(id: number): Promise<void>;
+      supprimer(ids: number[]): Promise<{ supprimes: number; fichiersEffaces: number }>;
+      supprimer(ids: number[]): Promise<{ supprimes: number; fichiersEffaces: number }>;
       telecharger(ids: number[]): Promise<{ ok: boolean; message: string }>;
       ouvrirDossier(id: number): Promise<void>;
       lireFichier(id: number): Promise<{ nom: string; donnees: ArrayBuffer } | null>;
       balayer(): Promise<void>;
+      cheminDuFichier(fichier: File): string;
+      choisirFichiers(): Promise<string[]>;
+      deposer(flux: "achat" | "vente", chemins: string[]): Promise<{ ajoutes: number; ignores: number }>;
+      version(): Promise<{ version: string; auteur: string; electron: string }>;
+      majEtat(): Promise<EtatMaj>;
+      majVerifier(): Promise<EtatMaj>;
+      majInstaller(): Promise<void>;
+      surMaj(rappel: (etat: EtatMaj) => void): () => void;
       parametres(): Promise<ParametresUI>;
       enregistrerParametres(v: Partial<ParametresUI>, motDePasse?: string): Promise<ParametresUI>;
       choisirDossier(): Promise<string | null>;
       testerSmtp(): Promise<{ ok: boolean; message: string }>;
+      surNavigation(rappel: () => void): () => void;
       surChangement(rappel: () => void): () => void;
     };
   }

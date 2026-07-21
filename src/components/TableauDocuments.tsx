@@ -1,24 +1,27 @@
 import { useMemo, useState } from "react";
 import {
   createColumnHelper, flexRender, getCoreRowModel, getFilteredRowModel,
-  getSortedRowModel, useReactTable, type SortingState, type RowSelectionState,
+  getSortedRowModel, useReactTable, type RowSelectionState, type SortingState,
 } from "@tanstack/react-table";
 import type { DocumentLigne } from "../lib/api";
 import { formatDate, formatTaille, LIBELLES_TYPE, STATUTS } from "../lib/statuts";
 
 const colonne = createColumnHelper<DocumentLigne>();
 
-/** Surligne les occurrences de la recherche dans une cellule. */
+const sansAccents = (texte: string) =>
+  texte.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+
+/** Surligne les occurrences de la recherche. */
 function Surligne({ texte, terme }: { texte: string; terme: string }) {
-  if (!terme.trim()) return <>{texte}</>;
-  const morceaux = texte.split(new RegExp(`(${terme.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")})`, "ig"));
+  if (!terme.trim() || !texte) return <>{texte}</>;
+  const motif = new RegExp(`(${terme.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")})`, "ig");
   return (
     <>
-      {morceaux.map((m, i) =>
-        m.toLowerCase() === terme.toLowerCase() ? (
-          <mark key={i} className="rounded bg-indigo-100 px-0.5 text-inherit dark:bg-indigo-900">{m}</mark>
+      {texte.split(motif).map((morceau, i) =>
+        morceau.toLowerCase() === terme.toLowerCase() ? (
+          <mark key={i} className="rounded-sm bg-vert/20 text-inherit">{morceau}</mark>
         ) : (
-          <span key={i}>{m}</span>
+          <span key={i}>{morceau}</span>
         ),
       )}
     </>
@@ -35,13 +38,13 @@ export function TableauDocuments({
   onOuvrir: (d: DocumentLigne) => void;
   ligneActive: number | null;
 }) {
-  const [tri, setTri] = useState<SortingState>([{ id: "detecte_le", desc: true }]);
+  const [tri, setTri] = useState<SortingState>([{ id: "date", desc: true }]);
 
   const colonnes = useMemo(
     () => [
       colonne.display({
         id: "selection",
-        size: 40,
+        size: 36,
         header: ({ table }) => (
           <input
             type="checkbox"
@@ -49,7 +52,7 @@ export function TableauDocuments({
             checked={table.getIsAllRowsSelected()}
             ref={(el) => { if (el) el.indeterminate = table.getIsSomeRowsSelected(); }}
             onChange={table.getToggleAllRowsSelectedHandler()}
-            className="h-4 w-4 rounded border-zinc-300 accent-indigo-600"
+            className="h-3.5 w-3.5 rounded border-trait accent-vert"
           />
         ),
         cell: ({ row }) => (
@@ -59,7 +62,7 @@ export function TableauDocuments({
             checked={row.getIsSelected()}
             onChange={row.getToggleSelectedHandler()}
             onClick={(e) => e.stopPropagation()}
-            className="h-4 w-4 rounded border-zinc-300 accent-indigo-600"
+            className="h-3.5 w-3.5 rounded border-trait accent-vert"
           />
         ),
       }),
@@ -67,28 +70,30 @@ export function TableauDocuments({
         header: "Fichier",
         cell: (info) => (
           <div className="min-w-0">
-            <p className="truncate font-mono text-[13px]">
+            <p className="truncate font-mono text-petit">
               <Surligne texte={info.getValue()} terme={recherche} />
             </p>
-            <p className="tabulaire text-xs text-zinc-400">
+            <p className="tabulaire text-micro text-doux">
               {formatTaille(info.row.original.taille_octets)}
             </p>
           </div>
         ),
       }),
-      colonne.accessor("flux", {
-        header: "Flux",
-        cell: (info) => (info.getValue() === "achat" ? "Achat" : "Vente"),
-      }),
       colonne.accessor("type_detecte", {
-        header: "Type détecté",
-        cell: (info) => LIBELLES_TYPE[info.getValue()] ?? info.getValue(),
+        header: "Type",
+        cell: (info) => (
+          <span className="text-petit">
+            {LIBELLES_TYPE[info.getValue()] ?? info.getValue()}
+          </span>
+        ),
       }),
       colonne.accessor((d) => d.envoye_le ?? d.detecte_le, {
-        id: "detecte_le",
+        id: "date",
         header: "Date",
         cell: (info) => (
-          <span className="tabulaire text-[13px]">{formatDate(info.getValue())}</span>
+          <span className="tabulaire font-mono text-petit text-doux">
+            {formatDate(info.getValue())}
+          </span>
         ),
       }),
       colonne.accessor("statut", {
@@ -96,7 +101,7 @@ export function TableauDocuments({
         cell: (info) => {
           const s = STATUTS[info.getValue()];
           return (
-            <span className={`pastille ${s.pastille}`}>
+            <span className={`pastille ${s.teinte}`}>
               <span className={`point ${s.point}`} />
               {s.libelle}
             </span>
@@ -107,7 +112,7 @@ export function TableauDocuments({
         header: "Motif",
         enableSorting: false,
         cell: (info) => (
-          <p className="max-w-[34ch] text-[13px] leading-snug text-zinc-600 dark:text-zinc-300">
+          <p className="max-w-[38ch] text-petit leading-snug text-doux">
             <Surligne texte={info.getValue() ?? ""} terme={recherche} />
           </p>
         ),
@@ -117,24 +122,31 @@ export function TableauDocuments({
         header: "",
         cell: ({ row }) => {
           const d = row.original;
-          const rejouable = d.statut === "echec" || d.statut === "bloquee" || d.statut === "a_verifier";
+          const rejouable = ["echec", "bloquee", "a_verifier"].includes(d.statut);
           return (
-            <div className="flex justify-end gap-1" onClick={(e) => e.stopPropagation()}>
+            <div className="flex justify-end gap-1 opacity-0 transition-opacity duration-rapide group-hover:opacity-100 focus-within:opacity-100"
+                 onClick={(e) => e.stopPropagation()}>
               {rejouable && (
                 <button
                   onClick={() => void window.api.envoyer(d.id)}
-                  title={d.statut === "echec" ? "Réessayer l'envoi" : "Envoyer quand même"}
-                  className="rounded px-2 py-1 text-xs text-indigo-600 hover:bg-indigo-50 dark:text-indigo-300 dark:hover:bg-indigo-950"
+                  className="bouton-nu px-2 py-1 text-petit text-vert"
                 >
                   {d.statut === "echec" ? "Réessayer" : "Envoyer"}
                 </button>
               )}
               <button
                 onClick={() => void window.api.telecharger([d.id])}
-                title="Télécharger"
-                className="rounded px-2 py-1 text-xs text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                className="bouton-nu px-2 py-1 text-petit"
               >
                 Télécharger
+              </button>
+              <button
+                onClick={() => void window.api.supprimer([d.id])}
+                title="Supprimer cette ligne"
+                aria-label={`Supprimer ${d.nom_fichier}`}
+                className="bouton-nu px-2 py-1 text-petit hover:bg-refus/10 hover:text-refus"
+              >
+                Supprimer
               </button>
             </div>
           );
@@ -149,19 +161,16 @@ export function TableauDocuments({
     columns: colonnes,
     state: { sorting: tri, rowSelection: selection, globalFilter: recherche },
     onSortingChange: setTri,
-    onRowSelectionChange: (m) =>
-      onSelection(typeof m === "function" ? m(selection) : m),
+    onRowSelectionChange: (m) => onSelection(typeof m === "function" ? m(selection) : m),
     getRowId: (ligne) => String(ligne.id),
     enableRowSelection: true,
-    globalFilterFn: (ligne, _colId, valeur) => {
-      // Recherche sur tous les champs affiches, accents ignores.
+    globalFilterFn: (ligne, _col, valeur) => {
       const d = ligne.original;
-      const sujet = [
-        d.nom_fichier, d.flux, LIBELLES_TYPE[d.type_detecte] ?? d.type_detecte,
-        STATUTS[d.statut].libelle, d.motif ?? "",
-      ].join(" ").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-      const terme = String(valeur).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-      return sujet.includes(terme);
+      const sujet = sansAccents([
+        d.nom_fichier, LIBELLES_TYPE[d.type_detecte] ?? d.type_detecte,
+        STATUTS[d.statut].libelle, d.motif ?? "", formatDate(d.envoye_le ?? d.detecte_le),
+      ].join(" "));
+      return sujet.includes(sansAccents(String(valeur)));
     },
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
@@ -170,9 +179,9 @@ export function TableauDocuments({
 
   if (!documents.length) {
     return (
-      <div className="m-6 rounded-xl border border-dashed border-zinc-300 p-12 text-center dark:border-zinc-700">
-        <p className="text-sm text-zinc-500">
-          Aucun document ne correspond. Déposez une facture dans un dossier surveillé,
+      <div className="flex h-full items-center justify-center p-10">
+        <p className="max-w-[46ch] text-center text-petit text-doux">
+          Rien à afficher. Déposez une facture dans la bannette ci-dessus,
           ou élargissez les filtres.
         </p>
       </div>
@@ -180,28 +189,27 @@ export function TableauDocuments({
   }
 
   return (
-    <div className="overflow-auto">
-      <table className="w-full border-collapse text-sm">
-        <thead className="sticky top-0 z-10 bg-zinc-50/95 backdrop-blur dark:bg-zinc-950/95">
+    <div className="h-full overflow-auto">
+      <table className="w-full border-collapse">
+        <thead className="sticky top-0 z-10 bg-papier">
           {table.getHeaderGroups().map((groupe) => (
-            <tr key={groupe.id} className="border-b border-zinc-200 dark:border-zinc-800">
+            <tr key={groupe.id} className="border-b border-trait">
               {groupe.headers.map((entete) => (
-                <th
-                  key={entete.id}
-                  className="px-3 py-2.5 text-left text-xs font-medium uppercase tracking-wide text-zinc-500"
-                >
+                <th key={entete.id} className="px-3 py-2 text-left">
                   {entete.column.getCanSort() ? (
                     <button
                       onClick={entete.column.getToggleSortingHandler()}
-                      className="flex items-center gap-1 hover:text-zinc-800 dark:hover:text-zinc-200"
+                      className="surtitre flex items-center gap-1 hover:text-encre"
                     >
                       {flexRender(entete.column.columnDef.header, entete.getContext())}
-                      <span className="text-[10px]">
+                      <span aria-hidden className="text-[9px]">
                         {{ asc: "▲", desc: "▼" }[entete.column.getIsSorted() as string] ?? ""}
                       </span>
                     </button>
                   ) : (
-                    flexRender(entete.column.columnDef.header, entete.getContext())
+                    <span className="surtitre">
+                      {flexRender(entete.column.columnDef.header, entete.getContext())}
+                    </span>
                   )}
                 </th>
               ))}
@@ -210,22 +218,26 @@ export function TableauDocuments({
         </thead>
         <tbody>
           {table.getRowModel().rows.map((ligne) => {
-            const demandeAction = STATUTS[ligne.original.statut].action;
+            const actionRequise = STATUTS[ligne.original.statut].action;
+            const active = ligneActive === ligne.original.id;
             return (
               <tr
                 key={ligne.id}
                 onClick={() => onOuvrir(ligne.original)}
                 className={[
-                  "cursor-pointer border-b border-zinc-100 transition-colors dark:border-zinc-800/60",
-                  ligneActive === ligne.original.id
-                    ? "bg-indigo-50 dark:bg-indigo-950/40"
-                    : demandeAction
-                      ? "bg-amber-50/40 hover:bg-amber-50 dark:bg-amber-950/10 dark:hover:bg-amber-950/20"
-                      : "hover:bg-zinc-50 dark:hover:bg-zinc-900",
+                  "group cursor-pointer border-b border-trait/60 transition-colors duration-rapide",
+                  active
+                    ? "bg-vert/10 shadow-[inset_3px_0_0_rgb(var(--vert))]"
+                    : "hover:bg-releve",
                 ].join(" ")}
               >
-                {ligne.getVisibleCells().map((cellule) => (
-                  <td key={cellule.id} className="px-3 py-2.5 align-top">
+                {ligne.getVisibleCells().map((cellule, index) => (
+                  <td key={cellule.id} className="relative px-3 py-2 align-middle">
+                    {/* Filet vertical : signale une ligne demandant une action,
+                        sans teinter toute la rangee. */}
+                    {index === 0 && actionRequise && (
+                      <span className={`absolute inset-y-0 left-0 w-[3px] ${STATUTS[ligne.original.statut].point}`} />
+                    )}
                     {flexRender(cellule.column.columnDef.cell, cellule.getContext())}
                   </td>
                 ))}

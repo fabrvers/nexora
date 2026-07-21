@@ -4,51 +4,26 @@ export type CleStatut = DocumentLigne["statut"];
 
 export interface DefinitionStatut {
   libelle: string;
-  /** Classes de la pastille dans le tableau. */
-  pastille: string;
+  /** Couleur de la pastille et du point, exprimee en classes Tailwind. */
+  teinte: string;
   point: string;
-  /** Demande une action de l'utilisateur. */
+  /** Le document attend une decision de l'utilisateur. */
   action: boolean;
 }
 
 export const STATUTS: Record<CleStatut, DefinitionStatut> = {
-  transmise: {
-    libelle: "Transmise",
-    pastille: "bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300",
-    point: "bg-emerald-500",
-    action: false,
-  },
-  en_attente: {
-    libelle: "En attente",
-    pastille: "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300",
-    point: "bg-zinc-400",
-    action: false,
-  },
-  a_verifier: {
-    libelle: "À vérifier",
-    pastille: "bg-amber-50 text-amber-800 dark:bg-amber-950 dark:text-amber-300",
-    point: "bg-amber-500",
-    action: true,
-  },
-  bloquee: {
-    libelle: "Bloquée",
-    pastille: "bg-amber-50 text-amber-800 dark:bg-amber-950 dark:text-amber-300",
-    point: "bg-amber-600",
-    action: true,
-  },
-  echec: {
-    libelle: "Échec",
-    pastille: "bg-red-50 text-red-700 dark:bg-red-950 dark:text-red-300",
-    point: "bg-red-500",
-    action: true,
-  },
-  ignoree: {
-    libelle: "Ignorée",
-    pastille: "bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400",
-    point: "bg-zinc-300",
-    action: false,
-  },
+  transmise:  { libelle: "Transmise",  teinte: "bg-valide/10 text-valide",   point: "bg-valide",  action: false },
+  en_attente: { libelle: "En attente", teinte: "bg-doux/10 text-doux",       point: "bg-doux",    action: false },
+  a_verifier: { libelle: "À vérifier", teinte: "bg-attente/10 text-attente", point: "bg-attente", action: true },
+  bloquee:    { libelle: "Bloquée",    teinte: "bg-attente/10 text-attente", point: "bg-attente", action: true },
+  echec:      { libelle: "Échec",      teinte: "bg-refus/10 text-refus",     point: "bg-refus",   action: true },
+  ignoree:    { libelle: "Ignorée",    teinte: "bg-doux/10 text-doux",       point: "bg-trait",   action: false },
 };
+
+/** Ordre d'affichage : ce qui demande une action d'abord. */
+export const ORDRE_STATUTS: CleStatut[] = [
+  "a_verifier", "bloquee", "echec", "en_attente", "transmise", "ignoree",
+];
 
 export const LIBELLES_TYPE: Record<string, string> = {
   facture: "Facture",
@@ -63,7 +38,7 @@ export const LIBELLES_TYPE: Record<string, string> = {
 export const formatDate = (iso: string | null): string =>
   iso
     ? new Date(iso).toLocaleString("fr-FR", {
-        day: "2-digit", month: "2-digit", year: "numeric",
+        day: "2-digit", month: "2-digit", year: "2-digit",
         hour: "2-digit", minute: "2-digit",
       })
     : "—";
