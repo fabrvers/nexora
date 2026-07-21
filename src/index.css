@@ -1,0 +1,27 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    color-scheme: light dark;
+  }
+  body {
+    @apply bg-zinc-50 text-zinc-900 antialiased;
+    @apply dark:bg-zinc-950 dark:text-zinc-100;
+  }
+  /* Les dates et les tailles s'alignent en colonne. */
+  .tabulaire { font-variant-numeric: tabular-nums; }
+  *:focus-visible {
+    @apply outline-none ring-2 ring-indigo-500 ring-offset-1 ring-offset-zinc-50;
+    @apply dark:ring-offset-zinc-950;
+  }
+}
+
+@layer components {
+  .pastille {
+    @apply inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5;
+    @apply text-xs font-medium whitespace-nowrap;
+  }
+  .point { @apply h-1.5 w-1.5 rounded-full; }
+}

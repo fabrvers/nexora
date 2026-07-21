@@ -1,0 +1,23 @@
+appId: fr.passerelle.pennylane
+productName: Passerelle Pennylane
+copyright: ""
+directories:
+  output: release
+  buildResources: build      # contient icon.ico
+files:
+  - dist
+  - dist-electron
+win:
+  target: nsis
+  icon: build/icon.ico
+  artifactName: Passerelle-Pennylane-Setup-${version}.exe
+nsis:
+  oneClick: false
+  perMachine: false                       # installation sans droits administrateur
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Passerelle Pennylane
+  installerLanguages:
+    - fr_FR
+  language: "1036"                        # francais

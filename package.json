@@ -1,0 +1,39 @@
+{
+  "name": "passerelle-pennylane",
+  "version": "1.0.0",
+  "description": "Transmet automatiquement les factures deposees a Pennylane",
+  "main": "dist-electron/main.js",
+  "author": "",
+  "license": "UNLICENSED",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "package": "npm run typecheck && npm run build && electron-builder --win",
+    "test": "node --experimental-strip-types --test tests/classifier.test.ts tests/periods.test.ts tests/db.test.ts tests/pdf.test.ts",
+    "typecheck": "tsc -p tsconfig.node.json --noEmit"
+  },
+  "dependencies": {
+    "chokidar": "^4.0.3",
+    "nodemailer": "^6.9.16",
+    "archiver": "^7.0.1",
+    "pdfjs-dist": "^4.9.155"
+  },
+  "devDependencies": {
+    "@tanstack/react-table": "^8.20.6",
+    "@types/nodemailer": "^6.4.17",
+    "@types/react": "^18.3.18",
+    "@types/react-dom": "^18.3.5",
+    "@vitejs/plugin-react": "^4.3.4",
+    "autoprefixer": "^10.4.20",
+    "electron": "^33.3.1",
+    "electron-builder": "^25.1.8",
+    "lucide-react": "^0.469.0",
+    "postcss": "^8.4.49",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "tailwindcss": "^3.4.17",
+    "typescript": "^5.7.2",
+    "vite": "^6.0.7",
+    "vite-plugin-electron": "^0.29.0"
+  }
+}

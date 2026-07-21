@@ -1,0 +1,52 @@
+# Compile l'installeur Windows sans rien installer sur votre poste.
+#
+# Deposez ce projet dans un depot GitHub : a chaque envoi sur la branche
+# principale, l'installeur est compile et depose dans les artefacts du run.
+# Un tag v1.0.0 publie en plus une release avec le .exe attache.
+
+name: Compiler l'installeur Windows
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  workflow_dispatch:      # bouton « Run workflow » dans l'onglet Actions
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          # Node 22 : les tests s'appuient sur --experimental-strip-types.
+          # Pas d'option « cache », qui exigerait un package-lock.json.
+          node-version: 22
+
+      - name: Installer les dépendances
+        # npm install et non npm ci : le projet n'embarque pas de
+        # package-lock.json, que npm ci exige.
+        run: npm install
+
+      - name: Vérifier la classification, les périodes et le stockage
+        run: npm test
+
+      - name: Compiler l'installeur
+        run: npm run package
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publier l'installeur en artefact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Passerelle-Pennylane-Setup
+          path: release/*.exe
+          retention-days: 30
+
+      - name: Attacher à la release sur un tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release/*.exe
