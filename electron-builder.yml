@@ -15,10 +15,22 @@ publish:
   provider: github
   owner: fabrvers
   repo: nexora
+  # Sans cette ligne, electron-builder cree un brouillon. Or un brouillon
+  # n'apparait pas dans /releases/latest : les postes installes ne verraient
+  # jamais la nouvelle version.
+  releaseType: release
 
 nsis:
   oneClick: false
-  perMachine: false                       # installation sans droits administrateur
+  # Installation dans le profil de l'utilisateur, sans droits administrateur.
+  # perMachine seul ne suffit pas : l'installeur propose alors une page
+  # « pour tous les utilisateurs / pour moi uniquement » dont le premier
+  # choix est preselectionne, ce qui envoie l'application dans Program Files.
+  # allowElevation: false supprime cette page et impose l'installation
+  # par utilisateur — indispensable pour que la mise a jour automatique
+  # n'ait jamais besoin d'une elevation de droits.
+  perMachine: false
+  allowElevation: false
   allowToChangeInstallationDirectory: true
   createDesktopShortcut: true
   createStartMenuShortcut: true

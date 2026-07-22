@@ -90,7 +90,9 @@ l'interface s'affichent immédiatement.
 - Un `.exe` d'environ 90 Mo — le poids d'Electron, qui embarque son moteur de
   rendu.
 - Installation **sans droits administrateur**, dans le profil de
-  l'utilisateur : vous n'avez pas besoin du service informatique.
+  l'utilisateur (`%LOCALAPPDATA%\Programs\Nexora`) : vous n'avez pas besoin
+  du service informatique, et les mises à jour automatiques s'appliquent
+  sans jamais demander d'élévation de droits.
 - Raccourcis bureau et menu Démarrer, dossier d'installation modifiable.
 - Installeur en français.
 - Désinstallation par le panneau de configuration Windows classique.

@@ -110,8 +110,9 @@ function lisible(erreur: unknown): string {
   if (message.includes("ENOTFOUND") || message.includes("ETIMEDOUT")) {
     return "Serveur de mise à jour injoignable. Vérifiez la connexion Internet.";
   }
-  if (message.includes("404")) {
-    return "Aucune version publiée n'a été trouvée pour cette application.";
+  if (message.includes("404") || message.includes("406") || message.includes("latest version")) {
+    return "Aucune version publiée trouvée. Si la publication GitHub existe encore "
+      + "à l'état de brouillon, ouvrez-la et cliquez sur « Publish release ».";
   }
   return message;
 }
