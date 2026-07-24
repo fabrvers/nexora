@@ -1,6 +1,6 @@
 {
   "name": "nexora",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "description": "Nexora — transmission automatique des factures vers Pennylane",
   "main": "dist-electron/main.js",
   "author": "FV",
