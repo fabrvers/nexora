@@ -12,7 +12,7 @@ export interface DefinitionStatut {
 }
 
 export const STATUTS: Record<CleStatut, DefinitionStatut> = {
-  transmise:  { libelle: "Transmise",  teinte: "bg-valide/10 text-valide",   point: "bg-valide",  action: false },
+  transmise:  { libelle: "Traitée",    teinte: "bg-valide/10 text-valide",   point: "bg-valide",  action: false },
   en_attente: { libelle: "En attente", teinte: "bg-doux/10 text-doux",       point: "bg-doux",    action: false },
   a_verifier: { libelle: "À vérifier", teinte: "bg-attente/10 text-attente", point: "bg-attente", action: true },
   bloquee:    { libelle: "Bloquée",    teinte: "bg-attente/10 text-attente", point: "bg-attente", action: true },
