@@ -18,6 +18,15 @@ export interface Parametres {
   smtpUtilisateur: string;
   smtpExpediteur: string;
   smtpChiffrement: "starttls" | "tls" | "aucun";
+  imapActif: boolean;
+  imapHote: string;
+  imapPort: number;
+  imapUtilisateur: string;
+  imapChiffrement: "tls" | "starttls";
+  imapDossierAchats: string;
+  imapDossierVentes: string;
+  imapIntervalleMinutes: number;
+  fluxVenteActif: boolean;
   delaiStabiliteMs: number;
   moisDebutExercice: number;
   theme: "clair" | "sombre" | "systeme";
@@ -36,6 +45,17 @@ const DEFAUTS: Parametres = {
   smtpUtilisateur: "",
   smtpExpediteur: "",
   smtpChiffrement: "starttls",
+  imapActif: false,
+  imapHote: "",
+  imapPort: 993,
+  imapUtilisateur: "",
+  imapChiffrement: "tls",
+  imapDossierAchats: "INBOX",
+  imapDossierVentes: "",
+  imapIntervalleMinutes: 2,
+  // Actif par defaut : une installation existante ne doit jamais cesser
+  // de surveiller son dossier de ventes a la faveur d'une mise a jour.
+  fluxVenteActif: true,
   delaiStabiliteMs: 2000,
   moisDebutExercice: 1,
   theme: "clair",
@@ -46,6 +66,7 @@ const DEFAUTS: Parametres = {
 
 const fichier = () => path.join(app.getPath("userData"), "parametres.json");
 const fichierSecret = () => path.join(app.getPath("userData"), "smtp.bin");
+const fichierSecretImap = () => path.join(app.getPath("userData"), "imap.bin");
 
 export function lire(): Parametres {
   try {
@@ -85,15 +106,42 @@ export function lireMotDePasse(): string {
   }
 }
 
+export function ecrireMotDePasseImap(motDePasse: string): void {
+  if (!motDePasse) {
+    fs.rmSync(fichierSecretImap(), { force: true });
+    return;
+  }
+  const donnees = safeStorage.isEncryptionAvailable()
+    ? safeStorage.encryptString(motDePasse)
+    : Buffer.from(motDePasse, "utf8");
+  fs.writeFileSync(fichierSecretImap(), donnees);
+}
+
+export function lireMotDePasseImap(): string {
+  try {
+    const donnees = fs.readFileSync(fichierSecretImap());
+    return safeStorage.isEncryptionAvailable()
+      ? safeStorage.decryptString(donnees)
+      : donnees.toString("utf8");
+  } catch {
+    return "";
+  }
+}
+
 /** Reglages obligatoires manquants, pour l'assistant de premier lancement. */
 export function manquants(p: Parametres = lire()): string[] {
   const requis: [keyof Parametres, string][] = [
     ["dossierAchats", "Dossier des factures d'achat"],
-    ["dossierVentes", "Dossier des factures de vente"],
     ["emailAchats", "Adresse Pennylane des achats"],
-    ["emailVentes", "Adresse Pennylane des ventes"],
     ["smtpHote", "Serveur d'envoi"],
     ["smtpExpediteur", "Adresse d'expédition"],
   ];
+  // Les reglages de vente ne sont exiges que si le flux est actif.
+  if (p.fluxVenteActif) {
+    requis.push(
+      ["dossierVentes", "Dossier des factures de vente"],
+      ["emailVentes", "Adresse Pennylane des ventes"],
+    );
+  }
   return requis.filter(([cle]) => !p[cle]).map(([, libelle]) => libelle);
 }

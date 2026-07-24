@@ -14,9 +14,22 @@ import * as db from "./db.js";
 import { envoyer, lisible } from "./mailer.js";
 import { lire } from "./settings.js";
 
-const EXTENSIONS = new Set([".pdf", ".jpg", ".jpeg", ".png"]);
+// PDF uniquement : une photo de facture passe l'OCR de Pennylane bien moins
+// bien qu'un PDF, et le type du document ne peut pas etre verifie sans texte.
+const EXTENSIONS = new Set([".pdf"]);
 /** Espacement des tentatives : 1 min, 5 min, 15 min. */
 const ATTENTES = [60_000, 300_000, 900_000];
+
+/**
+ * Filet de securite : un balayage complet a intervalle regulier.
+ *
+ * La surveillance evenementielle suffit dans la plupart des cas, mais elle
+ * peut manquer un depot si le partage reseau se reconnecte, si la session est
+ * verrouillee au mauvais moment, ou si le dossier devient brievement
+ * indisponible. Ce balayage rattrape ces cas sans intervention.
+ */
+const PERIODE_BALAYAGE = 120_000;
+let minuteurBalayage: NodeJS.Timeout | null = null;
 
 type Notifier = (evenement: string, charge?: unknown) => void;
 
@@ -30,12 +43,16 @@ export function demarrer(notifier: Notifier): void {
 
   for (const [flux, dossier] of [
     ["achat", p.dossierAchats],
-    ["vente", p.dossierVentes],
+    ["vente", p.fluxVenteActif ? p.dossierVentes : ""],
   ] as const) {
     if (!dossier) continue;
     const surveillant = chokidar.watch(dossier, {
       depth: 0,
       ignoreInitial: false,
+      // Les lecteurs reseau ne remontent pas toujours les evenements du
+      // systeme de fichiers : le sondage garantit la detection.
+      usePolling: /^(\\\\|[A-Z]:\\)/i.test(dossier) && !dossier.startsWith("C:\\"),
+      interval: 3000,
       awaitWriteFinish: {
         // Attend que la copie soit terminee : un fichier arrivant par le
         // reseau grossit progressivement.
@@ -44,13 +61,23 @@ export function demarrer(notifier: Notifier): void {
       },
     });
     surveillant.on("add", (chemin) => void traiter(chemin, flux));
+    // Un dossier reseau qui disparait puis revient ne doit pas arreter la
+    // surveillance : chokidar se reattache seul, on trace seulement.
+    surveillant.on("error", (erreur) => console.warn("Surveillance :", String(erreur)));
     surveillants.push(surveillant);
   }
+
+  if (minuteurBalayage) clearInterval(minuteurBalayage);
+  minuteurBalayage = setInterval(() => void balayer(), PERIODE_BALAYAGE);
 }
 
 export function arreter(): void {
   surveillants.forEach((s) => void s.close());
   surveillants = [];
+  if (minuteurBalayage) {
+    clearInterval(minuteurBalayage);
+    minuteurBalayage = null;
+  }
 }
 
 /** Reprend les fichiers deposes pendant que l'application etait fermee. */
@@ -58,7 +85,7 @@ export async function balayer(): Promise<void> {
   const p = lire();
   for (const [flux, dossier] of [
     ["achat", p.dossierAchats],
-    ["vente", p.dossierVentes],
+    ["vente", p.fluxVenteActif ? p.dossierVentes : ""],
   ] as const) {
     if (!dossier || !fs.existsSync(dossier)) continue;
     for (const nom of fs.readdirSync(dossier)) {

@@ -48,6 +48,28 @@ src/               interface React
 **Les fichiers ne sont jamais déplacés ni renommés.** L'état vit dans la ligne
 du tableau. Vos dossiers restent tels que vos utilisateurs les connaissent.
 
+**Réception par e-mail.** Nexora peut relever une boîte dédiée : vous y
+transférez une facture, elle en extrait le PDF et l'envoie à Pennylane. Les
+images du corps du message — logo de signature, bannières, icônes de réseaux
+sociaux — sont écartées. C'est la différence avec un transfert direct vers
+Pennylane, qui les importe comme autant de justificatifs et encombre la boîte
+de réception. Le routage se fait par dossier IMAP, donc côté serveur : deux
+postes qui consultent la même boîte voient le même classement.
+
+**Le flux vente est optionnel.** Une case dans Paramètres → Dossiers permet de
+le désactiver : l'onglet disparaît, le dossier n'est plus surveillé, et ses
+réglages cessent d'être exigés. Utile lorsque les factures de vente sont
+émises par un logiciel conforme à la facturation électronique. La case est
+cochée par défaut, pour qu'une mise à jour n'interrompe jamais une
+surveillance en place.
+
+**PDF uniquement.** Une photo de facture passe mal l'OCR de Pennylane, et
+le type du document ne peut pas être vérifié sans couche texte. Les autres
+formats déposés dans les dossiers sont ignorés.
+
+**La liste montre ce qui reste à faire.** Le filtre « À traiter » est actif
+par défaut : une liste vide signifie que tout est parti chez Pennylane.
+
 **Rien ne part sur un doute.** Un document dont le type n'est pas identifié
 passe en « À vérifier » et attend une décision. Un document non transmis se
 rattrape en un clic ; un bon de livraison comptabilisé en facture se découvre

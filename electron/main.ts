@@ -8,6 +8,7 @@ import { tester } from "./mailer.js";
 import * as parametres from "./settings.js";
 import { arreter, balayer, demarrer, transmettre } from "./watcher.js";
 import { construireMenu } from "./menu.js";
+import * as imap from "./imap.js";
 import { initialiserMaj } from "./maj.js";
 
 let fenetre: BrowserWindow | null = null;
@@ -273,7 +274,7 @@ ipcMain.handle("dossiers:balayer", () => balayer());
 ipcMain.handle("documents:choisir-fichiers", async () => {
   const resultat = await dialog.showOpenDialog({
     properties: ["openFile", "multiSelections"],
-    filters: [{ name: "Justificatifs", extensions: ["pdf", "jpg", "jpeg", "png"] }],
+    filters: [{ name: "Factures PDF", extensions: ["pdf"] }],
   });
   return resultat.canceled ? [] : resultat.filePaths;
 });
@@ -317,14 +318,17 @@ ipcMain.handle("documents:deposer", async (_e, flux: "achat" | "vente", chemins:
 ipcMain.handle("parametres:lire", () => ({
   ...parametres.lire(),
   motDePasseDefini: Boolean(parametres.lireMotDePasse()),
+  motDePasseImapDefini: Boolean(parametres.lireMotDePasseImap()),
   manquants: parametres.manquants(),
 }));
 
-ipcMain.handle("parametres:ecrire", (_e, valeurs: any, motDePasse?: string) => {
+ipcMain.handle("parametres:ecrire", (_e, valeurs: any, motDePasse?: string, motDePasseImap?: string) => {
   const fusion = parametres.ecrire({ ...valeurs, configure: true });
   if (typeof motDePasse === "string") parametres.ecrireMotDePasse(motDePasse);
+  if (typeof motDePasseImap === "string") parametres.ecrireMotDePasseImap(motDePasseImap);
   app.setLoginItemSettings({ openAtLogin: fusion.demarrageAutomatique });
   demarrer(notifier); // les dossiers ont pu changer
+  demarrerReleveImap();
   return { ...fusion, manquants: parametres.manquants(fusion) };
 });
 
@@ -334,6 +338,18 @@ ipcMain.handle("parametres:choisir-dossier", async () => {
 });
 
 ipcMain.handle("parametres:tester-smtp", () => tester());
+ipcMain.handle("parametres:tester-imap", () => imap.tester());
+
+let journalReleve: string[] = [];
+
+ipcMain.handle("imap:relever", async () => {
+  journalReleve = [];
+  const resultat = await imap.relever((ligne) => journalReleve.push(ligne));
+  if (resultat.pdfDeposes) await balayer();
+  return { ...resultat, journal: journalReleve };
+});
+
+ipcMain.handle("imap:journal", () => journalReleve);
 
 /**
  * Version de l'application.
@@ -381,9 +397,25 @@ if (!app.requestSingleInstanceLock()) {
     if (!parametres.manquants().length) {
       demarrer(notifier);
       await balayer();
+      demarrerReleveImap();
     }
   });
 }
 
-app.on("before-quit", () => { quitteVraiment = true; arreter(); });
+/** (Re)lance la relève de la boîte selon les réglages en vigueur. */
+function demarrerReleveImap(): void {
+  imap.demarrerReleve(
+    (ligne) => {
+      journalReleve.push(ligne);
+      if (journalReleve.length > 200) journalReleve = journalReleve.slice(-200);
+    },
+    () => void balayer(),
+  );
+}
+
+app.on("before-quit", () => {
+  quitteVraiment = true;
+  arreter();
+  imap.arreterReleve();
+});
 app.on("window-all-closed", () => { /* l'application vit dans la barre des taches */ });

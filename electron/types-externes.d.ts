@@ -20,3 +20,22 @@ declare module "archiver" {
   ): Archive;
   export default archiver;
 }
+
+declare module "mailparser" {
+  interface PieceJointeAnalysee {
+    filename?: string;
+    contentType?: string;
+    contentDisposition?: string;
+    cid?: string;
+    related?: boolean;
+    size?: number;
+    content: Buffer;
+  }
+  interface MessageAnalyse {
+    subject?: string;
+    from?: { text?: string };
+    date?: Date;
+    attachments?: PieceJointeAnalysee[];
+  }
+  export function simpleParser(source: Buffer | string): Promise<MessageAnalyse>;
+}

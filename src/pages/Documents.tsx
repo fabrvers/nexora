@@ -2,8 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import type { RowSelectionState } from "@tanstack/react-table";
 import type { DocumentLigne } from "../lib/api";
 import { bornes, dansPeriode, dateReference } from "../lib/periods";
-import { STATUTS, type CleStatut } from "../lib/statuts";
-import { BarreStatuts } from "../components/BarreStatuts";
+import { STATUTS, STATUTS_A_TRAITER } from "../lib/statuts";
+import { BarreStatuts, type FiltreStatut } from "../components/BarreStatuts";
 import { FiltrePeriode, type EtatPeriode } from "../components/FiltrePeriode";
 import { TableauDocuments } from "../components/TableauDocuments";
 import { ApercuPdf } from "../components/ApercuPdf";
@@ -19,7 +19,9 @@ export function Documents({
   onDepot: (flux: "achat" | "vente", chemins: string[]) => void;
 }) {
   const [recherche, setRecherche] = useState("");
-  const [statut, setStatut] = useState<CleStatut | "tout">("tout");
+  // Par defaut on n'affiche que ce qui attend une decision : une liste vide
+  // signifie que tout est parti.
+  const [statut, setStatut] = useState<FiltreStatut>("a_traiter");
   const [periode, setPeriode] = useState<EtatPeriode>({ cle: "tout" });
   const [selection, setSelection] = useState<RowSelectionState>({});
   const [apercu, setApercu] = useState<DocumentLigne | null>(null);
@@ -47,9 +49,11 @@ export function Documents({
       moisChoisi: periode.mois,
       anneeChoisie: periode.annee,
     });
-    return duFlux.filter(
-      (d) => (statut === "tout" || d.statut === statut) && dansPeriode(dateReference(d), b),
-    );
+    const correspond = (s: string) =>
+      statut === "tout" ||
+      (statut === "a_traiter" ? STATUTS_A_TRAITER.includes(s as never) : s === statut);
+
+    return duFlux.filter((d) => correspond(d.statut) && dansPeriode(dateReference(d), b));
   }, [duFlux, statut, periode, moisDebutExercice]);
 
   const selectionnes = Object.keys(selection).filter((k) => selection[k]).map(Number);
@@ -66,7 +70,7 @@ export function Documents({
         <div className="space-y-3 px-5 py-4">
           <Bannette flux={flux} libelle={libelle} onDepot={onDepot} />
 
-          {aTraiter.length > 0 && (
+          {aTraiter.length > 0 && statut !== "a_traiter" && (
             <button
               onClick={() => setStatut(aTraiter[0].statut)}
               className="flex w-full items-center gap-3 rounded-bloc border border-attente/30 bg-attente/8 px-4 py-2.5 text-left transition-colors duration-rapide hover:bg-attente/12"
@@ -96,9 +100,10 @@ export function Documents({
             <FiltrePeriode valeur={periode} onChange={setPeriode} />
             <button
               onClick={() => void window.api.balayer()}
-              className="bouton-discret py-1.5 text-petit"
+              title="La surveillance est permanente : ce bouton ne sert qu'à forcer une vérification immédiate."
+              className="bouton-nu py-1.5 text-petit"
             >
-              Analyser le dossier
+              Vérifier maintenant
             </button>
           </div>
         </div>
@@ -153,6 +158,11 @@ export function Documents({
 
         <div className="min-h-0 flex-1 border-t border-trait">
           <TableauDocuments
+            messageVide={
+              statut === "a_traiter"
+                ? "Rien à traiter : tous les documents sont partis chez Pennylane."
+                : "Aucun document ne correspond aux filtres."
+            }
             documents={filtres}
             recherche={recherche}
             selection={selection}

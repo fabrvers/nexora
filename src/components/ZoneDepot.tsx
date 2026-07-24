@@ -11,7 +11,7 @@ import { useEffect, useState } from "react";
  *    une facture de vente rangee dans les achats.
  */
 
-const FORMATS = ".pdf, .jpg, .jpeg, .png";
+const FORMATS = "Fichiers PDF uniquement";
 
 function contientDesFichiers(evenement: DragEvent | React.DragEvent): boolean {
   return Array.from(evenement.dataTransfer?.types ?? []).includes("Files");
@@ -53,7 +53,7 @@ export function Bannette({
           Déposez vos {libelle.toLowerCase()} ici
         </p>
         <p className="text-petit text-doux">
-          {FORMATS} — les fichiers sont copiés dans le dossier surveillé, puis transmis.
+          {FORMATS} — copiés dans le dossier surveillé, puis transmis aussitôt.
         </p>
       </div>
       <button

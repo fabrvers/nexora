@@ -35,6 +35,11 @@ export default function App() {
 
   useEffect(() => appliquerTheme(parametres?.theme ?? "clair"), [parametres?.theme]);
 
+  // Desactiver le flux vente alors qu'on le consulte doit ramener aux achats.
+  useEffect(() => {
+    if (parametres && !parametres.fluxVenteActif && vue === "vente") setVue("achat");
+  }, [parametres?.fluxVenteActif, vue]);
+
   const deposer = useCallback(async (flux: "achat" | "vente", chemins: string[]) => {
     if (!chemins.length) return;
     await window.api.deposer(flux, chemins);
@@ -67,6 +72,9 @@ export default function App() {
     );
   };
 
+  // Tant que les parametres ne sont pas charges, on suppose le flux actif :
+  // masquer puis reafficher l'onglet serait plus deroutant que l'inverse.
+  const venteActive = parametres?.fluxVenteActif ?? true;
   const incomplet = parametres && parametres.manquants.length > 0;
 
   return (
@@ -84,7 +92,7 @@ export default function App() {
 
         <nav className="flex items-end gap-5">
           <Onglet cle="achat" libelle="Factures d'achat" />
-          <Onglet cle="vente" libelle="Factures de vente" />
+          {venteActive && <Onglet cle="vente" libelle="Factures de vente" />}
         </nav>
 
         <div className="ml-auto flex items-center gap-2 pb-2.5">

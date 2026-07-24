@@ -36,10 +36,12 @@ contextBridge.exposeInMainWorld("api", {
   },
 
   parametres: () => ipcRenderer.invoke("parametres:lire"),
-  enregistrerParametres: (valeurs: unknown, motDePasse?: string) =>
-    ipcRenderer.invoke("parametres:ecrire", valeurs, motDePasse),
+  enregistrerParametres: (valeurs: unknown, motDePasse?: string, motDePasseImap?: string) =>
+    ipcRenderer.invoke("parametres:ecrire", valeurs, motDePasse, motDePasseImap),
   choisirDossier: () => ipcRenderer.invoke("parametres:choisir-dossier"),
   testerSmtp: () => ipcRenderer.invoke("parametres:tester-smtp"),
+  testerImap: () => ipcRenderer.invoke("parametres:tester-imap"),
+  releverBoite: () => ipcRenderer.invoke("imap:relever"),
 
   // Le menu Fichier > Paramètres pilote la navigation de l'interface.
   surNavigation: (rappel: () => void) => {

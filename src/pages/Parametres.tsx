@@ -5,10 +5,11 @@ import { LIBELLES_THEME, type Theme } from "../lib/theme";
 const MOIS = ["Janvier","Février","Mars","Avril","Mai","Juin",
               "Juillet","Août","Septembre","Octobre","Novembre","Décembre"];
 
-type Rubrique = "dossiers" | "pennylane" | "envoi" | "apparence" | "fonctionnement" | "apropos";
+type Rubrique = "dossiers" | "boite" | "pennylane" | "envoi" | "apparence" | "fonctionnement" | "apropos";
 
 const RUBRIQUES: { cle: Rubrique; libelle: string; aide: string }[] = [
   { cle: "dossiers", libelle: "Dossiers", aide: "Où Nexora surveille les dépôts" },
+  { cle: "boite", libelle: "Boîte e-mail", aide: "Factures reçues par transfert" },
   { cle: "pennylane", libelle: "Pennylane", aide: "Adresses de transmission" },
   { cle: "envoi", libelle: "Serveur d'envoi", aide: "Compte SMTP utilisé" },
   { cle: "apparence", libelle: "Apparence", aide: "Thème de l'application" },
@@ -53,6 +54,10 @@ export function Parametres({ onEnregistre }: { onEnregistre: (p: ParametresUI) =
   const [p, setP] = useState<ParametresUI | null>(null);
   const [rubrique, setRubrique] = useState<Rubrique>("dossiers");
   const [motDePasse, setMotDePasse] = useState("");
+  const [motDePasseImap, setMotDePasseImap] = useState("");
+  const [testImap, setTestImap] = useState<{ ok: boolean; message: string } | null>(null);
+  const [releve, setReleve] = useState<{ resume: string; journal: string[] } | null>(null);
+  const [releveEnCours, setReleveEnCours] = useState(false);
   const [test, setTest] = useState<{ ok: boolean; message: string } | null>(null);
   const [enregistre, setEnregistre] = useState(false);
   const [apropos, setApropos] = useState<{ version: string; auteur: string; electron: string } | null>(null);
@@ -77,9 +82,12 @@ export function Parametres({ onEnregistre }: { onEnregistre: (p: ParametresUI) =
   };
 
   const enregistrer = async () => {
-    const maj = await window.api.enregistrerParametres(p, motDePasse || undefined);
+    const maj = await window.api.enregistrerParametres(
+      p, motDePasse || undefined, motDePasseImap || undefined,
+    );
     setP(maj);
     setMotDePasse("");
+    setMotDePasseImap("");
     onEnregistre(maj);
     setEnregistre(true);
     setTimeout(() => setEnregistre(false), 3000);
@@ -148,11 +156,184 @@ export function Parametres({ onEnregistre }: { onEnregistre: (p: ParametresUI) =
                   Un dossier réseau fonctionne.
                 </p>
                 <DossierChamp cle="dossierAchats" label="Factures d'achat" />
-                <DossierChamp cle="dossierVentes" label="Factures de vente" />
-                {p.dossierAchats && p.dossierAchats === p.dossierVentes && (
+
+                <label className="flex items-center gap-2.5 border-t border-trait pt-4 text-petit">
+                  <input
+                    type="checkbox" checked={p.fluxVenteActif}
+                    onChange={(e) => set({ fluxVenteActif: e.target.checked })}
+                    className="h-4 w-4 rounded-bloc border-trait accent-vert"
+                  />
+                  Gérer aussi les factures de vente
+                </label>
+                {!p.fluxVenteActif && (
+                  <p className="text-petit text-doux">
+                    L'onglet « Factures de vente » est masqué et le dossier
+                    correspondant n'est plus surveillé. Les documents déjà
+                    transmis restent dans l'historique.
+                  </p>
+                )}
+
+                {p.fluxVenteActif && (
+                  <DossierChamp cle="dossierVentes" label="Factures de vente" />
+                )}
+                {p.fluxVenteActif && p.dossierAchats && p.dossierAchats === p.dossierVentes && (
                   <p className="text-petit text-refus">
                     Les deux dossiers sont identiques : vos ventes partiraient vers les achats.
                   </p>
+                )}
+              </>
+            )}
+
+            {rubrique === "boite" && (
+              <>
+                <p className="text-petit text-doux">
+                  Transférez les factures reçues vers une adresse dédiée. Nexora
+                  relève cette boîte et n'en extrait que les PDF réellement joints :
+                  logos de signature, bannières et icônes du corps du message sont
+                  écartés. Un message transféré en pièce jointe est ouvert pour
+                  y chercher la facture.
+                </p>
+                <p className="text-petit text-doux">
+                  Cette boîte n'est utilisée qu'en lecture : Nexora n'envoie jamais
+                  depuis cette adresse. L'expédition vers Pennylane se règle dans
+                  « Serveur d'envoi ».
+                </p>
+
+                <label className="flex items-center gap-2.5 text-petit">
+                  <input
+                    type="checkbox" checked={p.imapActif}
+                    onChange={(e) => set({ imapActif: e.target.checked })}
+                    className="h-4 w-4 rounded-bloc border-trait accent-vert"
+                  />
+                  Relever une boîte e-mail
+                </label>
+
+                {p.imapActif && (
+                  <>
+                    <div className="grid grid-cols-[1fr_7rem] gap-3">
+                      <Champ label="Serveur IMAP">
+                        <input
+                          value={p.imapHote} onChange={(e) => set({ imapHote: e.target.value })}
+                          placeholder="imap.votredomaine.fr" className="champ"
+                        />
+                      </Champ>
+                      <Champ label="Port">
+                        <input
+                          type="number" value={p.imapPort}
+                          onChange={(e) => set({ imapPort: Number(e.target.value) })}
+                          className="champ tabulaire"
+                        />
+                      </Champ>
+                    </div>
+                    <Champ label="Identifiant">
+                      <input
+                        value={p.imapUtilisateur}
+                        onChange={(e) => set({ imapUtilisateur: e.target.value })}
+                        placeholder="factures@votredomaine.fr" className="champ"
+                      />
+                    </Champ>
+                    <Champ
+                      label="Mot de passe"
+                      aide={p.motDePasseImapDefini
+                        ? "Un mot de passe est enregistré. Laissez vide pour le garder."
+                        : "Sur Gmail ou Microsoft 365, il faut un mot de passe d'application."}
+                    >
+                      <input
+                        type="password" value={motDePasseImap}
+                        onChange={(e) => setMotDePasseImap(e.target.value)}
+                        placeholder={p.motDePasseImapDefini ? "••••••••" : ""} className="champ"
+                      />
+                    </Champ>
+                    <Champ label="Chiffrement">
+                      <select
+                        value={p.imapChiffrement}
+                        onChange={(e) => set({ imapChiffrement: e.target.value as ParametresUI["imapChiffrement"] })}
+                        className="champ"
+                      >
+                        <option value="tls">SSL/TLS — port 993</option>
+                        <option value="starttls">STARTTLS — port 143</option>
+                      </select>
+                    </Champ>
+
+                    <Champ
+                      label="Dossier des achats"
+                      aide="Les messages non lus de ce dossier alimentent les factures d'achat."
+                    >
+                      <input
+                        value={p.imapDossierAchats}
+                        onChange={(e) => set({ imapDossierAchats: e.target.value })}
+                        placeholder="INBOX" className="champ font-mono text-petit"
+                      />
+                    </Champ>
+                    {p.fluxVenteActif && (
+                      <Champ
+                        label="Dossier des ventes"
+                        aide="Facultatif. Laissez vide si vous ne recevez pas de factures de vente par e-mail."
+                      >
+                        <input
+                          value={p.imapDossierVentes}
+                          onChange={(e) => set({ imapDossierVentes: e.target.value })}
+                          placeholder="Ventes" className="champ font-mono text-petit"
+                        />
+                      </Champ>
+                    )}
+                    <Champ label="Fréquence de relève">
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="number" min={1} max={60} value={p.imapIntervalleMinutes}
+                          onChange={(e) => set({ imapIntervalleMinutes: Number(e.target.value) })}
+                          className="champ tabulaire w-24"
+                        />
+                        <span className="text-petit text-doux">minutes</span>
+                      </div>
+                    </Champ>
+
+                    <div className="flex flex-wrap items-center gap-3">
+                      <button
+                        onClick={async () => setTestImap(await window.api.testerImap())}
+                        className="bouton-discret"
+                      >
+                        Tester la connexion
+                      </button>
+                      <button
+                        onClick={async () => {
+                          setReleveEnCours(true);
+                          const r = await window.api.releverBoite();
+                          setReleveEnCours(false);
+                          setReleve({
+                            resume: r.erreur
+                              ? r.erreur
+                              : `${r.messages} message(s) lus, ${r.pdfDeposes} PDF déposé(s), `
+                                + `${r.piecesEcartees} pièce(s) écartée(s).`,
+                            journal: r.journal,
+                          });
+                        }}
+                        disabled={releveEnCours}
+                        className="bouton-discret disabled:opacity-50"
+                      >
+                        {releveEnCours ? "Relève en cours…" : "Relever maintenant"}
+                      </button>
+                    </div>
+                    {testImap && (
+                      <p className={`text-petit ${testImap.ok ? "text-valide" : "text-refus"}`}>
+                        {testImap.message}
+                      </p>
+                    )}
+                    {releve && (
+                      <div className="space-y-1.5 rounded-bloc border border-trait bg-releve p-3">
+                        <p className="text-petit">{releve.resume}</p>
+                        {releve.journal.length > 0 && (
+                          <ul className="max-h-40 space-y-0.5 overflow-auto font-mono text-micro text-doux">
+                            {releve.journal.map((ligne, i) => <li key={i}>{ligne}</li>)}
+                          </ul>
+                        )}
+                      </div>
+                    )}
+                    <p className="text-petit text-doux">
+                      Le test et la relève utilisent les valeurs déjà enregistrées :
+                      enregistrez d'abord.
+                    </p>
+                  </>
                 )}
               </>
             )}
@@ -173,16 +354,23 @@ export function Parametres({ onEnregistre }: { onEnregistre: (p: ParametresUI) =
                     className="champ font-mono text-petit"
                   />
                 </Champ>
-                <Champ
-                  label="Adresse des ventes"
-                  alerte={alerteDomaine(p.emailVentes, "@customers.pennylane.com", "de vente")}
-                >
-                  <input
-                    value={p.emailVentes} onChange={(e) => set({ emailVentes: e.target.value })}
-                    placeholder="entreprise-xxxxxxxx@customers.pennylane.com"
-                    className="champ font-mono text-petit"
-                  />
-                </Champ>
+                {p.fluxVenteActif ? (
+                  <Champ
+                    label="Adresse des ventes"
+                    alerte={alerteDomaine(p.emailVentes, "@customers.pennylane.com", "de vente")}
+                  >
+                    <input
+                      value={p.emailVentes} onChange={(e) => set({ emailVentes: e.target.value })}
+                      placeholder="entreprise-xxxxxxxx@customers.pennylane.com"
+                      className="champ font-mono text-petit"
+                    />
+                  </Champ>
+                ) : (
+                  <p className="text-petit text-doux">
+                    Les factures de vente sont désactivées : seule l'adresse des
+                    achats est utilisée.
+                  </p>
+                )}
               </>
             )}
 

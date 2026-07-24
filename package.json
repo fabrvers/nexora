@@ -1,6 +1,6 @@
 {
   "name": "nexora",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "description": "Nexora — transmission automatique des factures vers Pennylane",
   "main": "dist-electron/main.js",
   "author": "FV",
@@ -9,13 +9,15 @@
     "dev": "vite",
     "build": "vite build",
     "package": "npm run typecheck && npm run build && electron-builder --win",
-    "test": "node --experimental-strip-types --test tests/classifier.test.ts tests/periods.test.ts tests/db.test.ts tests/pdf.test.ts",
+    "test": "node --experimental-strip-types --test tests/classifier.test.ts tests/periods.test.ts tests/db.test.ts tests/pdf.test.ts tests/pieces-jointes.test.ts",
     "typecheck": "tsc -p tsconfig.node.json --noEmit && tsc -p tsconfig.app.json --noEmit"
   },
   "dependencies": {
     "archiver": "^7.0.1",
     "chokidar": "^4.0.3",
     "electron-updater": "^6.8.9",
+    "imapflow": "^1.5.0",
+    "mailparser": "^3.9.14",
     "nodemailer": "^6.9.16",
     "pdfjs-dist": "^4.9.155"
   },

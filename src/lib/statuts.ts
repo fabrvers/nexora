@@ -20,6 +20,12 @@ export const STATUTS: Record<CleStatut, DefinitionStatut> = {
   ignoree:    { libelle: "Ignorée",    teinte: "bg-doux/10 text-doux",       point: "bg-trait",   action: false },
 };
 
+/**
+ * Statuts demandant une intervention. C'est le filtre applique par defaut :
+ * une liste vide signifie que tout est parti.
+ */
+export const STATUTS_A_TRAITER: CleStatut[] = ["a_verifier", "bloquee", "echec"];
+
 /** Ordre d'affichage : ce qui demande une action d'abord. */
 export const ORDRE_STATUTS: CleStatut[] = [
   "a_verifier", "bloquee", "echec", "en_attente", "transmise", "ignoree",

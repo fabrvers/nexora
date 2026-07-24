@@ -21,10 +21,16 @@ export interface ParametresUI {
   emailAchats: string; emailVentes: string;
   smtpHote: string; smtpPort: number; smtpUtilisateur: string;
   smtpExpediteur: string; smtpChiffrement: "starttls" | "tls" | "aucun";
+  imapActif: boolean; imapHote: string; imapPort: number;
+  imapUtilisateur: string; imapChiffrement: "tls" | "starttls";
+  imapDossierAchats: string; imapDossierVentes: string;
+  imapIntervalleMinutes: number;
+  fluxVenteActif: boolean;
   delaiStabiliteMs: number; moisDebutExercice: number;
   theme: "clair" | "sombre" | "systeme";
   demarrageAutomatique: boolean; reduireDansBarre: boolean;
-  configure: boolean; motDePasseDefini: boolean; manquants: string[];
+  configure: boolean; motDePasseDefini: boolean; motDePasseImapDefini: boolean;
+  manquants: string[];
 }
 
 export type EtatMaj =
@@ -58,9 +64,14 @@ declare global {
       majInstaller(): Promise<void>;
       surMaj(rappel: (etat: EtatMaj) => void): () => void;
       parametres(): Promise<ParametresUI>;
-      enregistrerParametres(v: Partial<ParametresUI>, motDePasse?: string): Promise<ParametresUI>;
+      enregistrerParametres(v: Partial<ParametresUI>, motDePasse?: string, motDePasseImap?: string): Promise<ParametresUI>;
       choisirDossier(): Promise<string | null>;
       testerSmtp(): Promise<{ ok: boolean; message: string }>;
+      testerImap(): Promise<{ ok: boolean; message: string }>;
+      releverBoite(): Promise<{
+        messages: number; pdfDeposes: number; piecesEcartees: number;
+        erreur?: string; journal: string[];
+      }>;
       surNavigation(rappel: () => void): () => void;
       surChangement(rappel: () => void): () => void;
     };

@@ -29,9 +29,10 @@ function Surligne({ texte, terme }: { texte: string; terme: string }) {
 }
 
 export function TableauDocuments({
-  documents, recherche, selection, onSelection, onOuvrir, ligneActive,
+  documents, recherche, selection, onSelection, onOuvrir, ligneActive, messageVide,
 }: {
   documents: DocumentLigne[];
+  messageVide: string;
   recherche: string;
   selection: RowSelectionState;
   onSelection: (s: RowSelectionState) => void;
@@ -180,10 +181,7 @@ export function TableauDocuments({
   if (!documents.length) {
     return (
       <div className="flex h-full items-center justify-center p-10">
-        <p className="max-w-[46ch] text-center text-petit text-doux">
-          Rien à afficher. Déposez une facture dans la bannette ci-dessus,
-          ou élargissez les filtres.
-        </p>
+        <p className="max-w-[46ch] text-center text-petit text-doux">{messageVide}</p>
       </div>
     );
   }
