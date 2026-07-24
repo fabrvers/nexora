@@ -192,28 +192,43 @@ ipcMain.handle("documents:telecharger", async (_e, ids: number[]) => {
  * suivant. La corbeille laisse une porte de sortie en cas d'erreur.
  */
 /**
+ * Compare deux chemins de dossier.
+ *
+ * Windows ne distingue pas la casse : « C:\\Factures » et « c:\\factures »
+ * designent le meme dossier. Une comparaison brute faisait echouer la
+ * reconnaissance, le fichier etait alors juge hors perimetre et survivait a
+ * la suppression — pour revenir au balayage suivant.
+ */
+function memeDossier(a: string, b: string): boolean {
+  const normaliser = (chemin: string) => {
+    const resolu = path.resolve(chemin).replace(/[\\/]+$/, "");
+    return process.platform === "win32" ? resolu.toLowerCase() : resolu;
+  };
+  return normaliser(a) === normaliser(b);
+}
+
+/**
  * Suppression de lignes.
  *
- * L'application decide seule du sort du fichier, pour eviter a l'utilisateur
- * un choix technique a chaque clic :
- *   - fichier encore dans un dossier surveille  -> ligne + fichier a la corbeille ;
- *     sans cela, il serait redetecte au prochain balayage et renvoye a Pennylane ;
- *   - fichier absent, deplace, ou range ailleurs -> seule la ligne est retiree.
+ * L'application decide seule du sort du fichier :
+ *   - fichier encore dans un dossier surveille  -> ligne + fichier supprimes ;
+ *     sans cela, il serait redetecte au prochain balayage et renvoye ;
+ *   - fichier absent ou range ailleurs          -> seule la ligne est retiree.
  *
- * Un fichier situe hors des dossiers surveilles n'est jamais touche : il ne
- * releve pas de cette application.
+ * Si un fichier resiste, sa ligne est conservee et l'utilisateur est prevenu :
+ * retirer la ligne d'un fichier toujours present donnerait l'illusion d'une
+ * suppression, jusqu'a sa reapparition.
  */
 ipcMain.handle("documents:supprimer", async (_e, ids: number[]) => {
   const docs = ids.map(db.parId).filter(Boolean) as db.Document[];
-  if (!docs.length) return { supprimes: 0, fichiersEffaces: 0 };
+  if (!docs.length) return { supprimes: 0, fichiersEffaces: 0, echecs: [] as string[] };
 
   const p = parametres.lire();
-  const dossiers = [p.dossierAchats, p.dossierVentes]
-    .filter(Boolean)
-    .map((d) => path.resolve(d));
+  const dossiers = [p.dossierAchats, p.dossierVentes].filter(Boolean);
 
   const avecFichier = docs.filter(
-    (d) => fs.existsSync(d.chemin) && dossiers.includes(path.dirname(path.resolve(d.chemin))),
+    (d) => fs.existsSync(d.chemin)
+      && dossiers.some((dossier) => memeDossier(dossier, path.dirname(d.chemin))),
   );
   const sansFichier = docs.length - avecFichier.length;
 
@@ -221,8 +236,8 @@ ipcMain.handle("documents:supprimer", async (_e, ids: number[]) => {
   if (avecFichier.length) {
     lignes.push(
       avecFichier.length === 1
-        ? "1 fichier sera envoyé à la corbeille Windows, avec sa ligne."
-        : `${avecFichier.length} fichiers seront envoyés à la corbeille Windows, avec leurs lignes.`,
+        ? "1 fichier sera supprimé du dossier surveillé, avec sa ligne."
+        : `${avecFichier.length} fichiers seront supprimés des dossiers surveillés, avec leurs lignes.`,
     );
     lignes.push(
       "Sans cela, ils seraient de nouveau détectés au prochain balayage et retransmis à Pennylane.",
@@ -250,23 +265,64 @@ ipcMain.handle("documents:supprimer", async (_e, ids: number[]) => {
     noLink: true,
   });
 
-  if (reponse.response !== 1) return { supprimes: 0, fichiersEffaces: 0 };
+  if (reponse.response !== 1) return { supprimes: 0, fichiersEffaces: 0, echecs: [] as string[] };
 
   let fichiersEffaces = 0;
-  for (const doc of avecFichier) {
+  const echecs: string[] = [];
+  const aRetirer: number[] = [];
+
+  for (const doc of docs) {
+    const doitEffacer = avecFichier.includes(doc);
+    if (!doitEffacer) {
+      aRetirer.push(doc.id);
+      continue;
+    }
+
+    let efface = false;
     try {
-      // Corbeille et non suppression definitive : sur des pieces comptables,
-      // une erreur de clic doit rester rattrapable.
+      // Corbeille de preference : sur des pieces comptables, une erreur de
+      // clic doit rester rattrapable.
       await shell.trashItem(doc.chemin);
-      fichiersEffaces++;
+      efface = true;
     } catch {
-      /* fichier verrouille : la ligne part quand meme */
+      try {
+        // Les lecteurs reseau n'ont pas de corbeille : on supprime alors
+        // directement, sinon le fichier reviendrait au balayage suivant.
+        fs.rmSync(doc.chemin, { force: true });
+        efface = !fs.existsSync(doc.chemin);
+      } catch {
+        efface = false;
+      }
+    }
+
+    if (efface) {
+      fichiersEffaces++;
+      aRetirer.push(doc.id);
+    } else {
+      // La ligne reste : le fichier est toujours la, l'etat doit le dire.
+      echecs.push(doc.nom_fichier);
     }
   }
 
-  const supprimes = db.supprimer(docs.map((d) => d.id));
+  const supprimes = aRetirer.length ? db.supprimer(aRetirer) : 0;
   notifier("document:maj");
-  return { supprimes, fichiersEffaces };
+
+  if (echecs.length) {
+    void dialog.showMessageBox(fenetre!, {
+      type: "warning",
+      title: "Suppression incomplète",
+      message: echecs.length === 1
+        ? "Un fichier n'a pas pu être supprimé."
+        : `${echecs.length} fichiers n'ont pas pu être supprimés.`,
+      detail: `${echecs.slice(0, 8).join("\n")}\n\n`
+        + "Ils sont peut-être ouverts dans un autre programme, ou le dossier est "
+        + "en lecture seule. Leurs lignes ont été conservées : sans cela, les "
+        + "documents réapparaîtraient à la prochaine vérification.",
+      buttons: ["Fermer"],
+    });
+  }
+
+  return { supprimes, fichiersEffaces, echecs };
 });
 
 ipcMain.handle("dossiers:balayer", () => balayer());

@@ -134,7 +134,7 @@ export default function App() {
         )}
       </main>
 
-      {!incomplet && <VoileDepot onDepot={deposer} />}
+      {!incomplet && <VoileDepot onDepot={deposer} venteActive={venteActive} />}
     </div>
   );
 }

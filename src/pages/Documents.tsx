@@ -137,13 +137,12 @@ export function Documents({
               <button
                 onClick={async () => {
                   const r = await window.api.supprimer(selectionnes);
-                  if (!r.supprimes) return;
+                  if (!r.supprimes && !r.echecs.length) return;
                   setSelection({});
-                  annoncer(
-                    r.fichiersEffaces
-                      ? `${r.supprimes} ligne(s) supprimée(s), ${r.fichiersEffaces} fichier(s) à la corbeille`
-                      : `${r.supprimes} ligne(s) supprimée(s)`,
-                  );
+                  const parties = [`${r.supprimes} ligne(s) supprimée(s)`];
+                  if (r.fichiersEffaces) parties.push(`${r.fichiersEffaces} fichier(s) effacé(s)`);
+                  if (r.echecs.length) parties.push(`${r.echecs.length} fichier(s) non supprimé(s)`);
+                  annoncer(parties.join(", "));
                 }}
                 className="bouton-nu py-1.5 text-petit hover:bg-refus/10 hover:text-refus"
               >

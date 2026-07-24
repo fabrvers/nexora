@@ -49,8 +49,8 @@ declare global {
       compteurs(): Promise<Record<string, number>>;
       envoyer(id: number): Promise<void>;
       ignorer(id: number): Promise<void>;
-      supprimer(ids: number[]): Promise<{ supprimes: number; fichiersEffaces: number }>;
-      supprimer(ids: number[]): Promise<{ supprimes: number; fichiersEffaces: number }>;
+      supprimer(ids: number[]): Promise<{ supprimes: number; fichiersEffaces: number; echecs: string[] }>;
+      supprimer(ids: number[]): Promise<{ supprimes: number; fichiersEffaces: number; echecs: string[] }>;
       telecharger(ids: number[]): Promise<{ ok: boolean; message: string }>;
       ouvrirDossier(id: number): Promise<void>;
       lireFichier(id: number): Promise<{ nom: string; donnees: ArrayBuffer } | null>;

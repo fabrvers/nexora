@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 /**
  * Depot de fichiers par glisser-deposer.
@@ -17,7 +17,7 @@ function contientDesFichiers(evenement: DragEvent | React.DragEvent): boolean {
   return Array.from(evenement.dataTransfer?.types ?? []).includes("Files");
 }
 
-async function cheminsDepuis(transfert: DataTransfer): Promise<string[]> {
+function cheminsDepuis(transfert: DataTransfer): string[] {
   return Array.from(transfert.files)
     .map((fichier) => window.api.cheminDuFichier(fichier))
     .filter(Boolean);
@@ -37,10 +37,10 @@ export function Bannette({
     <div
       onDragOver={(e) => { e.preventDefault(); setSurvol(true); }}
       onDragLeave={() => setSurvol(false)}
-      onDrop={async (e) => {
+      onDrop={(e) => {
         e.preventDefault();
         setSurvol(false);
-        onDepot(flux, await cheminsDepuis(e.dataTransfer));
+        onDepot(flux, cheminsDepuis(e.dataTransfer));
       }}
       className={[
         "flex items-center justify-between gap-4 rounded-bloc border border-dashed px-4 py-3",
@@ -69,39 +69,62 @@ export function Bannette({
   );
 }
 
-/** Voile plein écran, scindé par flux, actif pendant un glisser. */
+/**
+ * Voile plein ecran, actif pendant un glisser.
+ *
+ * La fermeture ne repose pas sur un comptage de dragenter/dragleave : ce
+ * comptage se desynchronise des qu'un glisser est abandonne hors de la
+ * fenetre, et le voile restait alors affiche. On surveille plutot la
+ * fraicheur du dernier dragover : sans nouvel evenement pendant un court
+ * instant, le glisser est termine, quelle qu'en soit la raison.
+ */
 export function VoileDepot({
-  onDepot,
+  onDepot, venteActive,
 }: {
   onDepot: (flux: "achat" | "vente", chemins: string[]) => void;
+  venteActive: boolean;
 }) {
   const [actif, setActif] = useState(false);
   const [cote, setCote] = useState<"achat" | "vente" | null>(null);
+  const dernierSurvol = useRef(0);
 
   useEffect(() => {
-    let compteur = 0;
+    const DELAI_FERMETURE = 220;
 
-    const entree = (e: DragEvent) => {
+    const survol = (e: DragEvent) => {
       if (!contientDesFichiers(e)) return;
-      compteur += 1;
+      e.preventDefault();
+      dernierSurvol.current = Date.now();
       setActif(true);
     };
-    const sortie = () => {
-      compteur = Math.max(0, compteur - 1);
-      if (compteur === 0) { setActif(false); setCote(null); }
-    };
-    const survol = (e: DragEvent) => { if (contientDesFichiers(e)) e.preventDefault(); };
-    const relacher = () => { compteur = 0; setActif(false); setCote(null); };
 
-    window.addEventListener("dragenter", entree);
-    window.addEventListener("dragleave", sortie);
+    const fermer = () => { setActif(false); setCote(null); };
+
+    const echappe = (e: KeyboardEvent) => { if (e.key === "Escape") fermer(); };
+
+    // Un glisser abandonne n'emet plus de dragover : la surveillance de
+    // fraicheur ferme le voile sans dependre d'un evenement de fin.
+    const veille = setInterval(() => {
+      if (dernierSurvol.current && Date.now() - dernierSurvol.current > DELAI_FERMETURE) {
+        dernierSurvol.current = 0;
+        fermer();
+      }
+    }, 100);
+
     window.addEventListener("dragover", survol);
-    window.addEventListener("drop", relacher);
+    window.addEventListener("drop", fermer);
+    window.addEventListener("dragend", fermer);
+    window.addEventListener("keydown", echappe);
+    // Sortir de la fenetre par le bord interrompt aussi le glisser.
+    document.addEventListener("mouseleave", fermer);
+
     return () => {
-      window.removeEventListener("dragenter", entree);
-      window.removeEventListener("dragleave", sortie);
+      clearInterval(veille);
       window.removeEventListener("dragover", survol);
-      window.removeEventListener("drop", relacher);
+      window.removeEventListener("drop", fermer);
+      window.removeEventListener("dragend", fermer);
+      window.removeEventListener("keydown", echappe);
+      document.removeEventListener("mouseleave", fermer);
     };
   }, []);
 
@@ -112,16 +135,16 @@ export function VoileDepot({
   }) => (
     <div
       onDragOver={(e) => { e.preventDefault(); setCote(flux); }}
-      onDrop={async (e) => {
+      onDrop={(e) => {
         e.preventDefault();
-        onDepot(flux, await cheminsDepuis(e.dataTransfer));
+        setActif(false);
+        setCote(null);
+        onDepot(flux, cheminsDepuis(e.dataTransfer));
       }}
       className={[
         "flex flex-1 flex-col items-center justify-center gap-2 border-2 border-dashed",
         "transition-colors duration-rapide",
-        cote === flux
-          ? "border-vert bg-vert/10"
-          : "border-trait bg-surface/60",
+        cote === flux ? "border-vert bg-vert/10" : "border-trait bg-surface/60",
       ].join(" ")}
     >
       <span className="surtitre">{aide}</span>
@@ -131,8 +154,15 @@ export function VoileDepot({
 
   return (
     <div className="apparition fixed inset-0 z-50 flex gap-3 bg-papier/95 p-3 backdrop-blur-sm">
-      <Moitie flux="achat" libelle="Achats" aide="Relâchez à gauche" />
-      <Moitie flux="vente" libelle="Ventes" aide="Relâchez à droite" />
+      {venteActive ? (
+        <>
+          <Moitie flux="achat" libelle="Achats" aide="Relâchez à gauche" />
+          <Moitie flux="vente" libelle="Ventes" aide="Relâchez à droite" />
+        </>
+      ) : (
+        // Flux vente desactive : une seule cible, sur toute la largeur.
+        <Moitie flux="achat" libelle="Factures d'achat" aide="Relâchez pour déposer" />
+      )}
     </div>
   );
 }
